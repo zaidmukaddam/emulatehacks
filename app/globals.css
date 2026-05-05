@@ -1,0 +1,408 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+    --font-display: var(--font-serif);
+    --font-serif: var(--font-serif);
+    --font-sans: var(--font-mono);
+    --font-mono: var(--font-mono);
+
+    --color-background: var(--background);
+    --color-foreground: var(--foreground);
+    --color-card: var(--card);
+    --color-card-foreground: var(--card-foreground);
+    --color-popover: var(--popover);
+    --color-popover-foreground: var(--popover-foreground);
+    --color-primary: var(--primary);
+    --color-primary-foreground: var(--primary-foreground);
+    --color-secondary: var(--secondary);
+    --color-secondary-foreground: var(--secondary-foreground);
+    --color-muted: var(--muted);
+    --color-muted-foreground: var(--muted-foreground);
+    --color-accent: var(--accent);
+    --color-accent-foreground: var(--accent-foreground);
+    --color-destructive: var(--destructive);
+    --color-border: var(--border);
+    --color-input: var(--input);
+    --color-ring: var(--ring);
+
+    --color-ink: var(--ink);
+    --color-ink-soft: var(--ink-soft);
+    --color-paper: var(--paper);
+    --color-paper-1: var(--paper-1);
+    --color-paper-2: var(--paper-2);
+    --color-paper-3: var(--paper-3);
+    --color-rule: var(--rule);
+    --color-rule-strong: var(--rule-strong);
+    --color-text-1: var(--text-1);
+    --color-text-2: var(--text-2);
+    --color-text-3: var(--text-3);
+    --color-text-4: var(--text-4);
+
+    --radius-sm: calc(var(--radius) * 0.6);
+    --radius-md: calc(var(--radius) * 0.8);
+    --radius-lg: var(--radius);
+    --radius-xl: calc(var(--radius) * 1.4);
+
+    --ease-out-strong: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out-strong: cubic-bezier(0.77, 0, 0.175, 1);
+    --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* Light is provided for completeness; the museum runs in dark by default. */
+:root {
+    --background: oklch(0.97 0.008 75);
+    --foreground: oklch(0.16 0.01 70);
+    --card: oklch(1 0 0);
+    --card-foreground: oklch(0.16 0.01 70);
+    --popover: oklch(1 0 0);
+    --popover-foreground: oklch(0.16 0.01 70);
+    --primary: oklch(0.55 0.13 60);
+    --primary-foreground: oklch(0.98 0.005 80);
+    --secondary: oklch(0.94 0.01 75);
+    --secondary-foreground: oklch(0.16 0.01 70);
+    --muted: oklch(0.94 0.01 75);
+    --muted-foreground: oklch(0.5 0.01 70);
+    --accent: oklch(0.94 0.01 75);
+    --accent-foreground: oklch(0.16 0.01 70);
+    --destructive: oklch(0.55 0.2 30);
+    --border: oklch(0.16 0.01 70 / 12%);
+    --input: oklch(0.16 0.01 70 / 14%);
+    --ring: oklch(0.55 0.13 60);
+
+    --ink: oklch(0.55 0.13 60);
+    --ink-soft: oklch(0.55 0.13 60 / 14%);
+    --paper: oklch(0.97 0.008 75);
+    --paper-1: oklch(0.95 0.008 75);
+    --paper-2: oklch(0.92 0.008 75);
+    --paper-3: oklch(0.89 0.008 75);
+    --rule: oklch(0.16 0.01 70 / 10%);
+    --rule-strong: oklch(0.16 0.01 70 / 22%);
+    --text-1: oklch(0.16 0.01 70);
+    --text-2: oklch(0.32 0.01 70);
+    --text-3: oklch(0.5 0.01 70);
+    --text-4: oklch(0.65 0.01 70);
+    --radius: 0.25rem;
+}
+
+.dark {
+    /* Warm near-black canvas: no blue. Surfaces step by ~3% lightness. */
+    --background: oklch(0.115 0.004 70);
+    --foreground: oklch(0.92 0.012 80);
+    --card: oklch(0.145 0.004 70);
+    --card-foreground: oklch(0.92 0.012 80);
+    --popover: oklch(0.16 0.004 70);
+    --popover-foreground: oklch(0.92 0.012 80);
+
+    /* Single accent: low-saturation ink amber. Used as text only, never as glow. */
+    --primary: oklch(0.78 0.11 78);
+    --primary-foreground: oklch(0.115 0.004 70);
+
+    --secondary: oklch(0.18 0.004 70);
+    --secondary-foreground: oklch(0.92 0.012 80);
+    --muted: oklch(0.18 0.004 70);
+    --muted-foreground: oklch(0.6 0.008 80);
+    --accent: oklch(0.2 0.004 70);
+    --accent-foreground: oklch(0.92 0.012 80);
+    --destructive: oklch(0.68 0.18 30);
+
+    --border: oklch(0.92 0.012 80 / 8%);
+    --input: oklch(0.92 0.012 80 / 12%);
+    --ring: oklch(0.78 0.11 78 / 50%);
+
+    --ink: oklch(0.78 0.11 78);
+    --ink-soft: oklch(0.78 0.11 78 / 12%);
+
+    /* Paper stack: flat solids, perceptible only when stacked. */
+    --paper: oklch(0.115 0.004 70);
+    --paper-1: oklch(0.145 0.004 70);
+    --paper-2: oklch(0.175 0.004 70);
+    --paper-3: oklch(0.205 0.004 70);
+
+    --rule: oklch(0.92 0.012 80 / 7%);
+    --rule-strong: oklch(0.92 0.012 80 / 16%);
+
+    /* Four-step text hierarchy: each step is meaningful. */
+    --text-1: oklch(0.94 0.012 80);
+    --text-2: oklch(0.78 0.012 80);
+    --text-3: oklch(0.6 0.008 80);
+    --text-4: oklch(0.46 0.008 80);
+}
+
+@layer base {
+    * {
+        @apply border-border;
+        outline-color: color-mix(in oklch, var(--ring) 50%, transparent);
+    }
+    html {
+        font-family: var(--font-mono);
+        text-rendering: optimizeLegibility;
+        -webkit-font-smoothing: antialiased;
+        font-feature-settings: "ss01", "cv11";
+    }
+    body {
+        @apply bg-background text-foreground;
+    }
+    ::selection {
+        background: var(--ink-soft);
+        color: var(--text-1);
+    }
+}
+
+/* === Catalog primitives (no gradients, no grids, no glow) === */
+
+/* Eyebrow label: tiny uppercase mono, used for section/ field labels. */
+.eh-eyebrow {
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    font-size: 10.5px;
+    letter-spacing: 0.16em;
+    color: var(--text-3);
+    font-variant-numeric: tabular-nums;
+}
+
+/* Hairline rule under a heading: print catalog convention. */
+.eh-rule {
+    border-bottom: 1px solid var(--rule);
+}
+.eh-rule-strong {
+    border-bottom: 1px solid var(--rule-strong);
+}
+
+/* CRT case: the ONE place a real shadow exists, because a CRT is a real object. */
+.eh-crt-frame {
+    background: var(--paper-1);
+    border: 1px solid var(--rule-strong);
+    box-shadow:
+        inset 0 1px 0 oklch(0.92 0.012 80 / 5%),
+        0 1px 0 oklch(0 0 0 / 30%);
+}
+
+.eh-crt-strip {
+    background: var(--paper-2);
+    border-bottom: 1px solid var(--rule-strong);
+    position: relative;
+}
+
+/* Tiny screws at the corners of the CRT case: physical detail, not decoration. */
+.eh-screw {
+    width: 5px;
+    height: 5px;
+    border-radius: 9999px;
+    background:
+        radial-gradient(
+            circle at 35% 35%,
+            oklch(0.34 0.005 70) 0%,
+            oklch(0.16 0.004 70) 70%
+        );
+    box-shadow: inset 0 0.5px 0 oklch(0.92 0.012 80 / 8%);
+}
+
+/* Animated entrance: short, sharp, opacity + transform only. */
+@keyframes eh-fade-up {
+    from {
+        opacity: 0;
+        transform: translateY(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+.eh-enter {
+    animation: eh-fade-up 320ms var(--ease-out-strong) both;
+}
+
+/* REC mark: a quiet record indicator, no glow. */
+@keyframes eh-rec {
+    0%, 60% { opacity: 1; }
+    70%, 100% { opacity: 0.35; }
+}
+.eh-rec-dot {
+    animation: eh-rec 1.6s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .eh-enter { animation: none; }
+    .eh-rec-dot { animation: none; opacity: 0.85; }
+}
+
+/* Hint disclosure: interruptible grid-template-rows trick. */
+.eh-disclosure {
+    display: grid;
+    grid-template-rows: 0fr;
+    transition: grid-template-rows 240ms var(--ease-drawer);
+}
+.eh-disclosure[data-open="true"] {
+    grid-template-rows: 1fr;
+}
+.eh-disclosure > * {
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* === Catalog row primitives === */
+
+/* Underline that draws under the title on row hover. Lives on the title span,
+   not the row, so multi-line titles wrap cleanly underneath each line. */
+.eh-row-title {
+    background-image: linear-gradient(
+        color-mix(in oklch, var(--text-1) 55%, transparent),
+        color-mix(in oklch, var(--text-1) 55%, transparent)
+    );
+    background-size: 0% 1px;
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    transition: background-size 320ms var(--ease-out-strong);
+}
+@media (hover: hover) and (pointer: fine) {
+    .group:hover .eh-row-title,
+    .group:focus-visible .eh-row-title {
+        background-size: 100% 1px;
+    }
+}
+@media (prefers-reduced-motion: reduce) {
+    .eh-row-title {
+        transition: none;
+    }
+}
+
+/* Underline that blooms on hover: for inline links. */
+.eh-link {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-size: 0 1px;
+    background-repeat: no-repeat;
+    background-position: 0 100%;
+    transition: background-size 200ms var(--ease-out-strong);
+}
+.eh-link:hover {
+    background-size: 100% 1px;
+}
+
+/* wterm scoped tweaks */
+.eh-terminal {
+    --wterm-bg: oklch(0.115 0.004 70);
+}
+
+/* === View Transitions === */
+
+:root {
+    --duration-exit: 150ms;
+    --duration-enter: 210ms;
+    --duration-move: 400ms;
+}
+
+@keyframes vt-fade {
+    from { filter: blur(3px); opacity: 0; }
+    to   { filter: blur(0);   opacity: 1; }
+}
+
+@keyframes vt-slide {
+    from { translate: var(--slide-offset); }
+    to   { translate: 0; }
+}
+
+@keyframes vt-slide-y {
+    from { transform: translateY(var(--slide-y-offset, 10px)); }
+    to   { transform: translateY(0); }
+}
+
+/* Fade */
+::view-transition-old(.fade-out) {
+    animation: var(--duration-exit) ease-in vt-fade reverse;
+}
+::view-transition-new(.fade-in) {
+    animation: var(--duration-enter) ease-out var(--duration-exit) both vt-fade;
+}
+
+/* Slide vertical */
+::view-transition-old(.slide-down) {
+    animation:
+        var(--duration-exit) ease-out both vt-fade reverse,
+        var(--duration-exit) ease-out both vt-slide-y reverse;
+}
+::view-transition-new(.slide-up) {
+    animation:
+        var(--duration-enter) ease-in var(--duration-exit) both vt-fade,
+        var(--duration-move) ease-in both vt-slide-y;
+}
+
+/* Directional navigation (single-class approach) */
+::view-transition-old(.nav-forward) {
+    --slide-offset: -60px;
+    animation:
+        var(--duration-exit) ease-in both vt-fade reverse,
+        var(--duration-move) ease-in-out both vt-slide reverse;
+}
+::view-transition-new(.nav-forward) {
+    --slide-offset: 60px;
+    animation:
+        var(--duration-enter) ease-out var(--duration-exit) both vt-fade,
+        var(--duration-move) ease-in-out both vt-slide;
+}
+
+::view-transition-old(.nav-back) {
+    --slide-offset: 60px;
+    animation:
+        var(--duration-exit) ease-in both vt-fade reverse,
+        var(--duration-move) ease-in-out both vt-slide reverse;
+}
+::view-transition-new(.nav-back) {
+    --slide-offset: -60px;
+    animation:
+        var(--duration-enter) ease-out var(--duration-exit) both vt-fade,
+        var(--duration-move) ease-in-out both vt-slide;
+}
+
+/* Shared element morph */
+::view-transition-group(.morph) {
+    animation-duration: var(--duration-move);
+}
+::view-transition-image-pair(.morph) {
+    animation-name: via-blur;
+}
+@keyframes via-blur {
+    30% { filter: blur(3px); }
+}
+
+/* Text morph — avoids raster scaling artifacts on text */
+::view-transition-group(.text-morph) {
+    animation-duration: var(--duration-move);
+}
+::view-transition-old(.text-morph) {
+    display: none;
+}
+::view-transition-new(.text-morph) {
+    animation: none;
+    object-fit: none;
+    object-position: left top;
+}
+
+/* Persistent element isolation — site header stays static */
+::view-transition-old(site-header) {
+    display: none;
+}
+::view-transition-new(site-header) {
+    animation: none;
+}
+
+/* Archive filter bar — sticky with backdrop-blur, isolate during transitions */
+::view-transition-old(archive-filter-bar) {
+    display: none;
+}
+::view-transition-new(archive-filter-bar) {
+    animation: none;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    ::view-transition-old(*),
+    ::view-transition-new(*),
+    ::view-transition-group(*) {
+        animation-duration: 0s !important;
+        animation-delay: 0s !important;
+    }
+}
