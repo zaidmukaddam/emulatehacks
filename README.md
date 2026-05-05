@@ -66,3 +66,7 @@ Built by [Zaid Mukaddam](https://zaidmukaddam.com).
 ---
 
 [Contributing guide](.github/CONTRIBUTING.md) · [![Sponsor](https://img.shields.io/badge/sponsor-%E2%9D%A4-ea4aaa?logo=github)](https://github.com/sponsors/zaidmukaddam)
+
+## License
+
+Apache 2.0 — see [LICENSE](LICENSE) for the full text.
