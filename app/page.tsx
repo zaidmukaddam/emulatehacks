@@ -10,6 +10,7 @@ import {
 import { SiteFooter, SiteHeader } from "@/components/site-header";
 import { ExhibitRow } from "@/components/exhibit-row";
 import { InkLink } from "@/components/ink-button";
+import { BinaryRain } from "@/components/binary-rain";
 import { scenarios, scenariosNewestFirst } from "@/lib/scenarios";
 
 export default function Home() {
@@ -37,8 +38,10 @@ export default function Home() {
 
 function Hero({ firstSlug, count }: { firstSlug: string; count: number }) {
   return (
-    <section className="border-b border-rule">
-      <div className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
+    <section className="relative overflow-hidden border-b border-rule">
+      {/* Binary rainfall — purely decorative, behind all content */}
+      <BinaryRain className="pointer-events-none absolute inset-0 h-full w-full opacity-30" />
+      <div className="relative mx-auto max-w-6xl px-6 py-20 sm:py-28">
         <div className="grid gap-16 lg:grid-cols-[1fr_480px] lg:items-center lg:gap-12">
           {/* Left: headline + CTA */}
           <div>

@@ -14,7 +14,7 @@ export default function SubmitPage() {
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
       <main className="flex-1">
-        <article className="mx-auto max-w-3xl px-6 pt-16 pb-20">
+        <article className="mx-auto max-w-6xl px-6 pt-16 pb-20">
           <div className="flex items-center gap-2 eh-eyebrow">
             <Send className="size-3 text-ink" aria-hidden />
             Submit
@@ -30,7 +30,7 @@ export default function SubmitPage() {
           </p>
 
           <form
-            action="https://formspree.io/f/placeholder"
+            action="https://formspree.io/f/xpqbdepn"
             method="POST"
             className="mt-12 grid gap-5"
           >

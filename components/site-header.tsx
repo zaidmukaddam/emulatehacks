@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { Archive, Info, Send, ShieldCheck } from "lucide-react";
 import { MetadataDot } from "@/components/metadata-dot";
+import { AccentSwitcher } from "@/components/accent-switcher";
 import { scenarios } from "@/lib/scenarios";
 import { cn } from "@/lib/utils";
 
@@ -32,6 +33,8 @@ export function SiteHeader() {
           <NavLink href="/submit" icon={Send}>
             Submit
           </NavLink>
+          <div className="ml-1 mr-0.5 h-4 w-px bg-rule-strong" aria-hidden />
+          <AccentSwitcher />
           <a
             href="https://x.com/zaidmukaddam"
             target="_blank"
@@ -123,25 +126,106 @@ function GitHubIcon({ className, ...props }: React.SVGProps<SVGSVGElement> & { c
 export function SiteFooter() {
   return (
     <footer className="border-t border-rule">
-      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-6 py-10 sm:flex-row sm:items-start sm:justify-between">
-        <div className="flex flex-col gap-2">
-          <span className="font-serif text-[22px] leading-none text-text-1">
-            EmulateHacks
-          </span>
-          <span className="eh-eyebrow inline-flex items-center gap-1.5">
-            a terminal museum
-            <MetadataDot className="text-text-4" />
-            2026
-          </span>
+      <div className="mx-auto max-w-6xl px-6 py-12">
+        <div className="grid gap-10 sm:grid-cols-[1fr_auto_auto_auto]">
+          {/* Brand */}
+          <div className="flex flex-col gap-3">
+            <span className="font-serif text-[22px] leading-none text-text-1">
+              EmulateHacks
+            </span>
+            <p className="max-w-[22ch] text-pretty text-[12px] leading-relaxed text-text-4">
+              A playable terminal museum for hacking history. Every system is a
+              safe simulation.
+            </p>
+            <div className="mt-1 flex items-center gap-2">
+              <a
+                href="https://x.com/zaidmukaddam"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="X"
+                className="text-text-4 transition-colors hover:text-text-1"
+              >
+                <XIcon className="size-3" />
+              </a>
+              <a
+                href="https://github.com/zaidmukaddam/emulatehacks"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="GitHub"
+                className="text-text-4 transition-colors hover:text-text-1"
+              >
+                <GitHubIcon className="size-3.5" />
+              </a>
+            </div>
+          </div>
+
+          {/* Explore */}
+          <FooterCol label="Explore">
+            <FooterLink href="/">Home</FooterLink>
+            <FooterLink href="/scenarios">Archive</FooterLink>
+            <FooterLink href="/about">About</FooterLink>
+            <FooterLink href="/submit">Submit</FooterLink>
+          </FooterCol>
+
+          {/* Learn */}
+          <FooterCol label="Learn">
+            <FooterLink href="/scenarios?category=classic-history">Classic history</FooterLink>
+            <FooterLink href="/scenarios?category=modern-cloud">Modern cloud</FooterLink>
+            <FooterLink href="/scenarios?category=incident-response">Incident response</FooterLink>
+            <FooterLink href="/scenarios?category=ctf-puzzle">CTF puzzles</FooterLink>
+          </FooterCol>
+
+          {/* Project */}
+          <FooterCol label="Project">
+            <FooterLink href="https://github.com/zaidmukaddam/emulatehacks" external>Source</FooterLink>
+            <FooterLink href="https://github.com/zaidmukaddam/emulatehacks/blob/main/.github/CONTRIBUTING.md" external>Contributing</FooterLink>
+            <FooterLink href="https://github.com/sponsors/zaidmukaddam" external>Sponsor</FooterLink>
+            <FooterLink href="https://github.com/zaidmukaddam/emulatehacks/blob/main/LICENSE" external>License</FooterLink>
+          </FooterCol>
         </div>
-        <div className="flex max-w-md items-start gap-3 text-text-3">
-          <ShieldCheck className="mt-0.5 size-4 shrink-0 text-ink" aria-hidden />
-          <p className="text-pretty text-[12.5px] leading-relaxed">
-            Every scenario is fictional or historically abstracted. No real
-            hosts, credentials, or networks are reachable from this site.
-          </p>
+
+        {/* Bottom bar */}
+        <div className="mt-10 flex flex-wrap items-center justify-between gap-4 border-t border-rule pt-6 eh-eyebrow text-text-4">
+          <span>© 2026 Zaid Mukaddam</span>
+          <span className="inline-flex items-center gap-1.5">
+            <ShieldCheck className="size-3 text-ink" aria-hidden />
+            No real systems reachable from this site
+          </span>
         </div>
       </div>
     </footer>
+  );
+}
+
+function FooterCol({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-2.5">
+      <span className="eh-eyebrow text-text-3">{label}</span>
+      {children}
+    </div>
+  );
+}
+
+function FooterLink({
+  href,
+  external,
+  children,
+}: {
+  href: string;
+  external?: boolean;
+  children: React.ReactNode;
+}) {
+  const cls = "text-[12px] text-text-3 transition-colors hover:text-text-1";
+  if (external) {
+    return (
+      <a href={href} target="_blank" rel="noreferrer" className={cls}>
+        {children}
+      </a>
+    );
+  }
+  return (
+    <Link href={href} className={cls}>
+      {children}
+    </Link>
   );
 }

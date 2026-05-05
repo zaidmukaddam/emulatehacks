@@ -60,7 +60,7 @@
     --card-foreground: oklch(0.16 0.01 70);
     --popover: oklch(1 0 0);
     --popover-foreground: oklch(0.16 0.01 70);
-    --primary: oklch(0.55 0.13 60);
+    --primary: oklch(0.42 0.15 145);
     --primary-foreground: oklch(0.98 0.005 80);
     --secondary: oklch(0.94 0.01 75);
     --secondary-foreground: oklch(0.16 0.01 70);
@@ -71,10 +71,10 @@
     --destructive: oklch(0.55 0.2 30);
     --border: oklch(0.16 0.01 70 / 12%);
     --input: oklch(0.16 0.01 70 / 14%);
-    --ring: oklch(0.55 0.13 60);
+    --ring: oklch(0.42 0.15 145);
 
-    --ink: oklch(0.55 0.13 60);
-    --ink-soft: oklch(0.55 0.13 60 / 14%);
+    --ink: oklch(0.42 0.15 145);
+    --ink-soft: oklch(0.42 0.15 145 / 14%);
     --paper: oklch(0.97 0.008 75);
     --paper-1: oklch(0.95 0.008 75);
     --paper-2: oklch(0.92 0.008 75);
@@ -97,8 +97,8 @@
     --popover: oklch(0.16 0.004 70);
     --popover-foreground: oklch(0.92 0.012 80);
 
-    /* Single accent: low-saturation ink amber. Used as text only, never as glow. */
-    --primary: oklch(0.78 0.11 78);
+    /* Single accent: phosphor green. Used as text only, never as glow. */
+    --primary: oklch(0.72 0.18 145);
     --primary-foreground: oklch(0.115 0.004 70);
 
     --secondary: oklch(0.18 0.004 70);
@@ -111,10 +111,10 @@
 
     --border: oklch(0.92 0.012 80 / 8%);
     --input: oklch(0.92 0.012 80 / 12%);
-    --ring: oklch(0.78 0.11 78 / 50%);
+    --ring: oklch(0.72 0.18 145 / 50%);
 
-    --ink: oklch(0.78 0.11 78);
-    --ink-soft: oklch(0.78 0.11 78 / 12%);
+    --ink: oklch(0.72 0.18 145);
+    --ink-soft: oklch(0.72 0.18 145 / 12%);
 
     /* Paper stack: flat solids, perceptible only when stacked. */
     --paper: oklch(0.115 0.004 70);
@@ -131,6 +131,40 @@
     --text-3: oklch(0.6 0.008 80);
     --text-4: oklch(0.46 0.008 80);
 }
+
+/* ── Accent theme overrides ──────────────────────────────────────────────── */
+
+/* Amber CRT */
+.dark[data-theme="amber"],
+[data-theme="amber"].dark {
+    --primary: oklch(0.78 0.11 78);
+    --ring: oklch(0.78 0.11 78 / 50%);
+    --ink: oklch(0.78 0.11 78);
+    --ink-soft: oklch(0.78 0.11 78 / 12%);
+}
+:root[data-theme="amber"]:not(.dark) {
+    --primary: oklch(0.55 0.13 60);
+    --ring: oklch(0.55 0.13 60);
+    --ink: oklch(0.55 0.13 60);
+    --ink-soft: oklch(0.55 0.13 60 / 14%);
+}
+
+/* Monochrome */
+.dark[data-theme="mono"],
+[data-theme="mono"].dark {
+    --primary: oklch(0.84 0.005 80);
+    --ring: oklch(0.84 0.005 80 / 50%);
+    --ink: oklch(0.84 0.005 80);
+    --ink-soft: oklch(0.84 0.005 80 / 12%);
+}
+:root[data-theme="mono"]:not(.dark) {
+    --primary: oklch(0.30 0.005 80);
+    --ring: oklch(0.30 0.005 80);
+    --ink: oklch(0.30 0.005 80);
+    --ink-soft: oklch(0.30 0.005 80 / 14%);
+}
+
+/* ── Accent switcher dot active/inactive — handled by React useTheme ─────── */
 
 @layer base {
     * {

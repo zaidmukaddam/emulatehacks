@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist_Mono, Instrument_Serif } from "next/font/google";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Providers } from "@/components/providers";
 import "./globals.css";
 
 const geistMono = Geist_Mono({
@@ -56,9 +57,12 @@ export default function RootLayout({
     <html
       lang="en"
       className={`dark ${geistMono.variable} ${instrumentSerif.variable}`}
+      suppressHydrationWarning
     >
       <body className="min-h-dvh bg-background text-foreground antialiased">
-        {children}
+        <Providers>
+          {children}
+        </Providers>
         <Analytics />
         <SpeedInsights />
       </body>

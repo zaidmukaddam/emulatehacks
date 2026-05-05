@@ -19,7 +19,7 @@ export const copyFailKernel: Scenario = {
   objective:
     "Decide in the next ten minutes whether this node is exposed to CVE-2026-31431, and apply a same-day mitigation if you cannot reboot.",
   briefing:
-    "Theori disclosed CVE-2026-31431 (Copy Fail) yesterday. It's a logic flaw in the kernel's algif_aead module, an unprivileged process can write a few bytes into the page cache of any readable file, including setuid binaries. Public 732-byte PoC. No race window. Reliable across Ubuntu, RHEL, Amazon Linux, SUSE. Worse: the page cache is shared across containers on the same kernel, so one tenant can poison /usr/bin/su for everyone else on this node. You can't reboot until the off-peak window tonight. Find out what's safe to ship now.",
+    "Theori disclosed CVE-2026-31431 (Copy Fail) on April 30th 2026. It's a logic flaw in the kernel's algif_aead module, an unprivileged process can write a few bytes into the page cache of any readable file, including setuid binaries. Public 732-byte PoC. No race window. Reliable across Ubuntu, RHEL, Amazon Linux, SUSE. Worse: the page cache is shared across containers on the same kernel, so one tenant can poison /usr/bin/su for everyone else on this node. You can't reboot until the off-peak window tonight. Find out what's safe to ship now.",
   env: {
     USER: "responder",
     SHELL: "/bin/sh",

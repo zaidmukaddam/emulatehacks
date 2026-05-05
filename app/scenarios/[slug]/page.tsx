@@ -47,7 +47,7 @@ export default async function ScenarioPage({
     <div className="flex min-h-dvh flex-col">
       <SiteHeader />
       <main className="flex-1">
-        <article className="mx-auto max-w-4xl px-6 pt-10 pb-20">
+        <article className="mx-auto max-w-6xl px-6 pt-10 pb-20">
           <Link
             href="/scenarios"
             transitionTypes={["nav-back"]}
