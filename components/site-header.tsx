@@ -9,40 +9,50 @@ export function SiteHeader() {
   const total = scenarios.length;
   return (
     <header className="sticky top-0 z-30 border-b border-rule bg-background" style={{ viewTransitionName: "site-header" }}>
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-6">
-        <Link href="/" className="group flex items-baseline gap-3">
-          <span className="font-serif text-[24px] leading-none">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
+        {/* Logo */}
+        <Link href="/" className="group flex shrink-0 items-baseline gap-2.5">
+          <span className="font-serif text-[22px] leading-none sm:text-[24px]">
             EmulateHacks
           </span>
-          <span className="hidden items-center gap-1.5 eh-eyebrow sm:flex">
+          <span className="hidden items-center gap-1.5 eh-eyebrow text-text-4 lg:flex">
             terminal museum
             <MetadataDot className="text-text-4" />
             est. 2026
           </span>
         </Link>
+
+        {/* Nav */}
         <nav className="flex items-center gap-0.5">
+          {/* Text labels hidden below md */}
           <NavLink href="/scenarios" icon={Archive}>
-            Archive
-            <span className="ml-2 rounded-sm border border-rule px-1 py-0.5 text-[10px] tabular-nums text-text-3">
+            <span className="hidden sm:inline">Archive</span>
+            <span
+              className="hidden tabular-nums sm:inline ml-1.5 rounded-sm border border-rule px-1 py-0.5 text-[10px] text-text-3"
+            >
               {String(total).padStart(2, "0")}
             </span>
           </NavLink>
           <NavLink href="/about" icon={Info}>
-            About
+            <span className="hidden sm:inline">About</span>
           </NavLink>
           <NavLink href="/submit" icon={Send}>
-            Submit
+            <span className="hidden sm:inline">Submit</span>
           </NavLink>
-          <div className="ml-1 mr-0.5 h-4 w-px bg-rule-strong" aria-hidden />
+
+          <div className="mx-1 h-4 w-px bg-rule-strong" aria-hidden />
+
           <AccentSwitcher />
+
+          {/* Social icons — sized to meet 40×40px hit area */}
           <a
             href="https://x.com/zaidmukaddam"
             target="_blank"
             rel="noreferrer"
             aria-label="X (Twitter)"
             className={cn(
-              "inline-flex items-center justify-center rounded-sm p-2 text-text-3",
-              "transition-colors duration-150 ease-out hover:text-text-1 hover:bg-paper-1",
+              "inline-flex size-9 items-center justify-center rounded-sm text-text-3",
+              "transition-[transform,colors] duration-150 ease-out hover:bg-paper-1 hover:text-text-1",
               "active:translate-y-px",
             )}
           >
@@ -54,8 +64,8 @@ export function SiteHeader() {
             rel="noreferrer"
             aria-label="GitHub repository"
             className={cn(
-              "inline-flex items-center justify-center rounded-sm p-2 text-text-3",
-              "transition-colors duration-150 ease-out hover:text-text-1 hover:bg-paper-1",
+              "inline-flex size-9 items-center justify-center rounded-sm text-text-3",
+              "transition-[transform,colors] duration-150 ease-out hover:bg-paper-1 hover:text-text-1",
               "active:translate-y-px",
             )}
           >
@@ -80,12 +90,15 @@ function NavLink({
     <Link
       href={href}
       className={cn(
-        "group/nav inline-flex items-center gap-1.5 rounded-sm px-3 py-1.5 text-[13px] text-text-2",
-        "transition-colors duration-150 ease-out hover:text-text-1 hover:bg-paper-1",
+        "group/nav inline-flex min-h-9 min-w-9 items-center gap-1.5 rounded-sm px-2 py-1.5 text-[13px] text-text-2 sm:px-3",
+        "transition-[transform,colors] duration-150 ease-out hover:bg-paper-1 hover:text-text-1",
         "active:translate-y-px",
       )}
     >
-      <Icon className="size-3.5 text-text-4 transition-colors group-hover/nav:text-text-2" aria-hidden />
+      <Icon
+        className="size-3.5 shrink-0 text-text-4 transition-colors duration-150 group-hover/nav:text-text-2"
+        aria-hidden
+      />
       {children}
     </Link>
   );
