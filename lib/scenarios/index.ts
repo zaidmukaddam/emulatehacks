@@ -33,6 +33,7 @@ import { stuxnetSample } from "./stuxnet-plc";
 import { suspiciousSsh } from "./suspicious-ssh";
 import { terrapinSsh } from "./terrapin-ssh";
 import { tjActionsTagMutation } from "./tj-actions-tag-mutation";
+import { trustedVolumesRfq } from "./trusted-volumes-rfq";
 import { wannacryRansomware } from "./wannacry-ransomware";
 import { xzBackdoor } from "./xz-backdoor";
 
@@ -77,6 +78,7 @@ export const scenarios: Scenario[] = [
   npmQixPhish, // EXH-034 / 2025
   react2shell, // EXH-035 / 2025
   copyFailKernel, // EXH-036 / 2026
+  trustedVolumesRfq, // EXH-037 / 2026
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
