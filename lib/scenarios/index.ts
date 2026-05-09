@@ -1,5 +1,6 @@
 import type { Scenario } from "../types";
 import { threeCxSupplyChain } from "./3cx-supply-chain";
+import { canvasFreeForTeacher } from "./canvas-free-for-teacher";
 import { cihVirus } from "./cih-virus";
 import { citrixBleed } from "./citrix-bleed";
 import { ciTokenLeak } from "./ci-token-leak";
@@ -37,7 +38,7 @@ import { wannacryRansomware } from "./wannacry-ransomware";
 import { xzBackdoor } from "./xz-backdoor";
 
 /**
- * Catalog order: oldest incident to newest (EXH-001 through EXH-036). The archive page
+ * Catalog order: oldest incident to newest (EXH-001 through EXH-037). The archive page
  * renders newest-first via `scenariosNewestFirst`.
  */
 export const scenarios: Scenario[] = [
@@ -77,6 +78,7 @@ export const scenarios: Scenario[] = [
   npmQixPhish, // EXH-034 / 2025
   react2shell, // EXH-035 / 2025
   copyFailKernel, // EXH-036 / 2026
+  canvasFreeForTeacher, // EXH-037 / 2026
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));

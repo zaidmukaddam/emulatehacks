@@ -45,6 +45,7 @@ import type { Category, Scenario } from "./types";
 
 const SCENARIO_GLYPH: Record<string, LucideIcon> = {
   "3cx-supply-chain": Phone,
+  "canvas-free-for-teacher": BookOpen,
   "citrix-bleed-token": ShieldOff,
   "ci-token-leak": Workflow,
   "classic-password-file": BookOpen,
