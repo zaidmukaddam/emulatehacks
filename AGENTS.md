@@ -28,7 +28,7 @@ mkdir -p public && cp node_modules/@wterm/core/wasm/wterm.wasm public/wterm.wasm
 
 - `bun run lint` — ESLint (flat config, eslint-config-next)
 - `bun run type-check` — `tsc --noEmit`
-- `bun run test:scenarios` — headless scenario runner verifying all 36 scenarios (140 steps) are reachable
+- `bun run test:scenarios` - headless scenario runner verifying all 37 scenarios (147 steps) are reachable
 
 ### Build
 

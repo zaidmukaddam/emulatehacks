@@ -14,6 +14,7 @@ import { f5TmuiRce } from "./f5-tmui-rce";
 import { heartbleedTls } from "./heartbleed-tls";
 import { http2RapidReset } from "./http2-rapid-reset";
 import { iloveyouVirus } from "./iloveyou-virus";
+import { jdownloaderInstallerSwap } from "./jdownloader-installer-swap";
 import { log4shellJndi } from "./log4shell-jndi";
 import { melissaMacro } from "./melissa-macro";
 import { miraiBotnet } from "./mirai-botnet";
@@ -77,6 +78,7 @@ export const scenarios: Scenario[] = [
   npmQixPhish, // EXH-034 / 2025
   react2shell, // EXH-035 / 2025
   copyFailKernel, // EXH-036 / 2026
+  jdownloaderInstallerSwap, // EXH-037 / 2026
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
