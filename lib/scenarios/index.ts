@@ -21,6 +21,7 @@ import { morrisWorm } from "./morris-worm";
 import { moveitTransferClop } from "./moveit-transfer";
 import { mydoomWorm } from "./mydoom-worm";
 import { npmQixPhish } from "./npm-qix-phish";
+import { panOsCaptivePortal } from "./pan-os-captive-portal";
 import { polyfillCdn } from "./polyfill-cdn";
 import { proxylogonExchange } from "./proxylogon-exchange";
 import { react2shell } from "./react2shell";
@@ -77,6 +78,7 @@ export const scenarios: Scenario[] = [
   npmQixPhish, // EXH-034 / 2025
   react2shell, // EXH-035 / 2025
   copyFailKernel, // EXH-036 / 2026
+  panOsCaptivePortal, // EXH-037 / 2026
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));

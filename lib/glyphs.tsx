@@ -66,6 +66,7 @@ const SCENARIO_GLYPH: Record<string, LucideIcon> = {
   "moveit-mft-clop": FolderInput,
   "mydoom-smtp": MailWarning,
   "npm-qix-phish": PackageX,
+  "pan-os-captive-portal": ShieldAlert,
   "polyfill-cdn-sale": Globe,
   "proxylogon-exchange": MailSearch,
   "react2shell-rsc": Component,
