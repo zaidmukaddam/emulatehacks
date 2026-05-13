@@ -9,7 +9,7 @@ export const windowsKevShellMshtml: Scenario = {
   exhibit: "EXH-038",
   title: "February KEV Pair",
   tagline:
-    "February 11, 2026. CISA adds two related Microsoft protection-mechanism failures to the KEV catalog. Your proxy team already sees HTML smuggling attachments that match the CERT email template.",
+    "10 February 2026. CISA adds two related Microsoft protection-mechanism failures to the KEV catalog. Your proxy team already sees HTML smuggling attachments that match the CERT email template.",
   category: "incident-response",
   difficulty: "intermediate",
   era: "2020s",
@@ -34,7 +34,7 @@ export const windowsKevShellMshtml: Scenario = {
   commands: {
     "python3 mail_triage.py --headers mail/quarantine.eml.txt": "simulated safe tool replay for windows-kev-shell-mshtml; replaces: cat mail/quarantine.eml.txt\n",
     "python3 ir_toolkit.py extract-ioc --ioc mshtml --input edr/process-tree.txt": "simulated safe tool replay for windows-kev-shell-mshtml; replaces: grep -nF mshtml edr/process-tree.txt\n",
-    "tshark -r evidence.pcap -Y 'frame contains \"2026-02-11\"' --follow-log PROXY-BLOCK.log": "simulated safe tool replay for windows-kev-shell-mshtml; replaces: grep -nF 2026-02-11 PROXY-BLOCK.log\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"2026-02-10\"' --follow-log PROXY-BLOCK.log": "simulated safe tool replay for windows-kev-shell-mshtml; replaces: grep -nF 2026-02-10 PROXY-BLOCK.log\n",
     "python3 ir_toolkit.py parse-artifact --input host/windows-build.txt": "simulated safe tool replay for windows-kev-shell-mshtml; replaces: cat host/windows-build.txt\n",
     "tshark -r evidence.pcap --follow-log edr/isolation.log": "simulated safe tool replay for windows-kev-shell-mshtml; replaces: cat edr/isolation.log\n",
     "python3 ir_toolkit.py parse-artifact --input edr/process-tree.txt": "simulated safe tool replay for windows-kev-shell-mshtml; replaces: cat edr/process-tree.txt\n",
@@ -66,9 +66,9 @@ export const windowsKevShellMshtml: Scenario = {
     },
     "/home/soc/feb-kev/PROXY-BLOCK.log": {
       content: [
-        "2026-02-11T07:12:03 action=strip subject='Payroll realignment' att=deferrals.html.sz",
-        "2026-02-11T07:18:44 action=block url=https://track.redir.example/mshtml-loader",
-        "2026-02-11T07:21:09 action=alert user=executives alias='Shell gadget wording'",
+        "2026-02-10T07:12:03 action=strip subject='Payroll realignment' att=deferrals.html.sz",
+        "2026-02-10T07:18:44 action=block url=https://track.redir.example/mshtml-loader",
+        "2026-02-10T07:21:09 action=alert user=executives alias='Shell gadget wording'",
       ].join("\n"),
     },
     "/home/soc/feb-kev/host/windows-build.txt": {
@@ -80,9 +80,9 @@ export const windowsKevShellMshtml: Scenario = {
     },
     "/home/soc/feb-kev/edr/isolation.log": {
       content: [
-        "2026-02-11T07:23:10Z host=exec-4432 action=network_isolate status=success",
-        "2026-02-11T07:25:02Z host=exec-4432 action=collect_triage_bundle status=success",
-        "2026-02-11T07:41:50Z host=exec-4432 action=queue_feb_cu status=success",
+        "2026-02-10T07:23:10Z host=exec-4432 action=network_isolate status=success",
+        "2026-02-10T07:25:02Z host=exec-4432 action=collect_triage_bundle status=success",
+        "2026-02-10T07:41:50Z host=exec-4432 action=queue_feb_cu status=success",
       ].join("\n"),
     },
     "/home/soc/feb-kev/public-poc/html_smuggling_attachment_stub.txt": {
@@ -135,8 +135,8 @@ export const windowsKevShellMshtml: Scenario = {
           id: "proxy",
           phase: "Impact",
           goal: "Grep the proxy log for HTML smuggling or redir alerts today.",
-          hint: "`tshark -r evidence.pcap -Y 'frame contains \"2026-02-11\"' --follow-log PROXY-BLOCK.log`.",
-          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"2026-02-11\"' --follow-log PROXY-BLOCK.log" }],
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"2026-02-10\"' --follow-log PROXY-BLOCK.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"2026-02-10\"' --follow-log PROXY-BLOCK.log" }],
           narration:
             "Proxy telemetry shows the campaign trying to fetch the second stage. The block is good, but the endpoint still needs containment.",
         },
@@ -178,7 +178,7 @@ export const windowsKevShellMshtml: Scenario = {
   ],
   debrief: {
     summary:
-      "CVE-2026-21510 and CVE-2026-21513 are real identifiers in public databases as of early 2026, described by Microsoft as protection mechanism failures in Windows Shell and MSHTML with high severity and user-interaction prerequisites. CISA listed both in the Known Exploited Vulnerabilities catalog with remediation deadlines in March 2026. This scenario stays descriptive; it does not teach exploitation.",
+      "CVE-2026-21510 and CVE-2026-21513 appear in NIST NVD with published timestamps of 10 February 2026, described by Microsoft as protection mechanism failures in Windows Shell and MSHTML. CISA listed both in the Known Exploited Vulnerabilities catalog the same day (10 February 2026) with remediation due 3 March 2026 per CISA's KEV export. This scenario stays descriptive; it does not teach exploitation.",
     lesson:
       "Treat paired KEV entries as a campaign forecast, not two independent bugs. Combine mail controls, asset inventory on build numbers, and identity reset paths when HTML social engineering is in play.",
     simulated: [

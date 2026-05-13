@@ -5,7 +5,7 @@ export const copyFailKernel: Scenario = {
   exhibit: "EXH-043",
   title: "Copy Fail",
   tagline:
-    "April 30, 2026. A tenant reports that `su` misbehaves on a shared node after a rival team's CI job ran. The same day, CVE-2026-31431 (Copy Fail) hits the front page.",
+    "Late April 2026. A tenant reports that `su` misbehaves on a shared node after a rival team's CI job ran. Press and vendor posts about CVE-2026-31431 (Copy Fail) land the same shift while NVD already listed the CVE on 22 April.",
   category: "incident-response",
   difficulty: "advanced",
   era: "2020s",
@@ -232,13 +232,13 @@ export const copyFailKernel: Scenario = {
   ],
   debrief: {
     summary:
-      "CVE-2026-31431 (Copy Fail), disclosed April 29 2026 by Theori, is a logic flaw in the Linux kernel's algif_aead module. The 2017 in-place AEAD optimization allowed a page-cache page to end up in the kernel's writable destination buffer for an AEAD operation submitted over an AF_ALG socket. An unprivileged process could then drive splice() into that socket and overwrite a few bytes inside the page cache of any readable file, including setuid binaries like /usr/bin/su. Reliable, no race, every major distro since Linux 4.14, public 732-byte PoC.",
+      "CVE-2026-31431 (Copy Fail) is tracked in NIST NVD with a published date of 22 April 2026 (CVSS 3.1 base 7.8). Coordinated public disclosure and analysis (including from Theori) clustered in late April 2026; CISA added it to the Known Exploited Vulnerabilities catalog on 1 May 2026 with a federal remediation due date of 15 May 2026. Mechanically it is a logic flaw in the Linux kernel algif_aead path: the in-place AEAD optimisation could let a page-cache page appear in a writable crypto buffer, and splice() into an AF_ALG socket could flip a few bytes in the page cache of readable files, including setuid binaries like /usr/bin/su, without the reliable timing games typical of older LPE chains.",
     lesson:
       "Two things. First, the structural fix is the boundary, not the patch: containers were never meant to be a security boundary against the host kernel, and Copy Fail just makes that concrete. If you run untrusted code today (CI runners, AI sandboxes, multi-tenant Kubernetes), move it to Firecracker, gVisor, or per-tenant VMs and stop relying on namespace isolation as if it were a hardware boundary. Second, the same-day mitigation is real: blacklist algif_aead via a modprobe drop-in, rmmod it where loaded, and add a seccomp profile that denies AF_ALG socket creation in pod specs. That eliminates the attack surface entirely until the kernel reboot lands. Don't depend on file integrity monitoring, Copy Fail writes only to the in-memory page cache, so on-disk hashes never change.",
     simulated: [
       "All hostnames, sessions, IPs, and the contents of /proc/modules are invented.",
       "No kernel-mode behaviour is modelled or executed; this exhibit is a defensive walk-through of public information from Theori, Bugcrowd, and the University of Toronto advisory.",
-      "The CVE number, disclosure date, affected kernel range, mitigation (modprobe blacklist), and the unaffected-isolation list (Firecracker / gVisor / V8 isolates) are real.",
+      "CVE-2026-31431, NVD publication timing, KEV listing and due dates (CISA feeds), mitigation class (restrict AF_ALG / algif_aead), and isolation guidance (hardware VMs and strong sandboxes versus shared kernels) reflect public metadata and vendor guidance.",
     ],
   },
 };
