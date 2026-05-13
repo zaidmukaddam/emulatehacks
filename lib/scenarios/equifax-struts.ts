@@ -24,6 +24,13 @@ export const equifaxStruts: Scenario = {
   env: { USER: "ir", SHELL: "/bin/sh", PWD: "/reconstruction/equifax-shape" },
   ps: ["  PID TTY TIME CMD", "  501 ?   0:02 java"],
   history: [],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input CVE-2017-5638.txt": "simulated safe tool replay for equifax-struts-cve; replaces: cat CVE-2017-5638.txt\n",
+    "tshark -r evidence.pcap --follow-log haproxy-edge.log": "simulated safe tool replay for equifax-struts-cve; replaces: cat haproxy-edge.log\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"ognl\"' --follow-log haproxy-edge.log": "simulated safe tool replay for equifax-struts-cve; replaces: grep -nF ognl haproxy-edge.log\n",
+    "curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: %{(#_multipart)?}' http://127.0.0.1/customerportal/oauth/authorize":
+      "200\n(simulated: edge returns 200 while Struts OGNL is still evaluated server-side in vulnerable builds)\n",
+  },
   files: {
     "/reconstruction/equifax-shape/CVE-2017-5638.txt": {
       content: [
@@ -41,32 +48,68 @@ export const equifaxStruts: Scenario = {
         '198.51.100.3 - [10/Mar/2017:09:18:01] "GET /customerportal/ HTTP/1.1" 200 9033',
       ].join("\n"),
     },
+    // Apache Struts S2-045 / CVE-2017-5638 Content-Type OGNL prefix (public exploits used long single-line headers).
+    "/reconstruction/equifax-shape/public-poc/S2-045_Content-Type_prefix.txt": {
+      content: [
+        "CVE-2017-5638  minimal Content-Type prefix reproduced in many defensive write-ups (payloads often extend this):",
+        "",
+        "Content-Type: %{(#_='multipart/form-data').(#dm=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS)",
+        ".(#_memberAccess?(#_memberAccess=#dm):",
+        "((#container=#context['com.opensymphony.xwork2.ActionContext.container']).(#ognlUtil=#container.getInstance(@com.opensymphony.xwork2.ognl.OgnlUtil@class)).(#ognlUtil.getExcludedPackageNames().clear()).(#ognlUtil.getExcludedClasses().clear()).(#context.setMemberAccess(#dm))))}",
+        "",
+        "# ... attacker appends method calls to evaluate OGNL to RCE ...",
+        "",
+        "# curl repro shape (tabletop): malformed Content-Type on POST to Struts action.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "cve",
-      goal: "Read the CVE summary.",
-      hint: "`cat CVE-2017-5638.txt`.",
-      matches: [{ kind: "exact", command: "cat CVE-2017-5638.txt" }],
-      narration:
-        "OGNL in Content-Type, the kind of bug that fits in one HTTP header.",
-    },
+          id: "curl-ognl",
+          goal: "Replay a minimal curl that carries a malformed Struts-style Content-Type header.",
+          hint: "`curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: %{(#_multipart)?}' http://127.0.0.1/customerportal/oauth/authorize`.",
+          matches: [
+            {
+              kind: "exact",
+              command:
+                "curl -s -o /dev/null -w '%{http_code}' -H 'Content-Type: %{(#_multipart)?}' http://127.0.0.1/customerportal/oauth/authorize",
+            },
+          ],
+          narration:
+            "Synthetic curl shows how one malformed header still crosses the edge in tabletop replay.",
+        },
     {
-      id: "log",
-      goal: "Read the edge log excerpt.",
-      hint: "`cat haproxy-edge.log`.",
-      matches: [{ kind: "exact", command: "cat haproxy-edge.log" }],
-      narration:
-        "Your WAF might have logged it as `INVALID_CT`, only post-hoc review found the OGNL.",
-    },
+          id: "cve",
+          goal: "Read the CVE summary.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input CVE-2017-5638.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input CVE-2017-5638.txt" }],
+          narration:
+            "OGNL in Content-Type, the kind of bug that fits in one HTTP header. Names, PCI zones, and PII are fake. The `%{(…)}` OGNL gadget grammar and the CVE number are real. Your job is log literacy, not exploitation.",
+        },
     {
-      id: "grep-ognl",
-      goal: "Pull the attacker line with OGNL context.",
-      hint: "`grep -nF ognl haproxy-edge.log`.",
-      matches: [{ kind: "exact", command: "grep -nF ognl haproxy-edge.log" }],
-      narration:
-        "Patch availability without inventory equals breach inevitability.",
-    },
+          id: "log",
+          goal: "Read the edge log excerpt.",
+          hint: "`tshark -r evidence.pcap --follow-log haproxy-edge.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log haproxy-edge.log" }],
+          narration:
+            "Your WAF might have logged it as `INVALID_CT`, only post-hoc review found the OGNL.",
+        },
+    {
+          id: "grep-ognl",
+          goal: "Pull the attacker line with OGNL context.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"ognl\"' --follow-log haproxy-edge.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"ognl\"' --follow-log haproxy-edge.log" }],
+          narration:
+            "Patch availability without inventory equals breach inevitability.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/S2-045_Content-Type_prefix.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/S2-045_Content-Type_prefix.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

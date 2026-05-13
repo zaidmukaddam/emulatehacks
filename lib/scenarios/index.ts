@@ -1,13 +1,24 @@
 import type { Scenario } from "../types";
 import { threeCxSupplyChain } from "./3cx-supply-chain";
+import { aiAssistedAdminZeroDay } from "./ai-assisted-zero-day-admin";
+import { applePlatformCveSurge } from "./apple-platform-cve-surge";
 import { cihVirus } from "./cih-virus";
 import { citrixBleed } from "./citrix-bleed";
 import { ciTokenLeak } from "./ci-token-leak";
 import { classicPasswd } from "./classic-passwd";
+import { canvasLmsCompromise } from "./canvas-lms-compromise";
 import { codeRedWorm } from "./code-red-worm";
 import { colonialPipeline } from "./colonial-pipeline";
 import { confickerWorm } from "./conficker-worm";
+import { copyFailDirtyFrag } from "./copy-fail-dirty-frag";
 import { copyFailKernel } from "./copy-fail-kernel";
+import { cve202632202SpoofLure } from "./cve-2026-32202-spoof-lure";
+import { greenplasmaPrivesc } from "./greenplasma-privesc";
+import { miniShaiHulud } from "./mini-shai-hulud";
+import { nextAdvisoryWave2026 } from "./next-advisory-wave-2026";
+import { panosUseridPortal0300 } from "./panos-cve-2026-0300";
+import { windowsKevShellMshtml } from "./windows-kev-shell-mshtml";
+import { yellowkeyBitlocker } from "./yellowkey-bitlocker";
 import { equifaxStruts } from "./equifax-struts";
 import { exposedEnv } from "./exposed-env";
 import { f5TmuiRce } from "./f5-tmui-rce";
@@ -37,7 +48,7 @@ import { wannacryRansomware } from "./wannacry-ransomware";
 import { xzBackdoor } from "./xz-backdoor";
 
 /**
- * Catalog order: oldest incident to newest (EXH-001 through EXH-036). The archive page
+ * Catalog order: oldest incident to newest (EXH-001 through EXH-047). The archive page
  * renders newest-first via `scenariosNewestFirst`.
  */
 export const scenarios: Scenario[] = [
@@ -76,7 +87,18 @@ export const scenarios: Scenario[] = [
   tjActionsTagMutation, // EXH-033 / 2025
   npmQixPhish, // EXH-034 / 2025
   react2shell, // EXH-035 / 2025
-  copyFailKernel, // EXH-036 / 2026
+  nextAdvisoryWave2026, // EXH-036 / 2026 Jan
+  yellowkeyBitlocker, // EXH-037 / 2026 Feb
+  windowsKevShellMshtml, // EXH-038 / 2026 Feb
+  greenplasmaPrivesc, // EXH-039 / 2026 Feb
+  applePlatformCveSurge, // EXH-040 / 2026 Mar
+  canvasLmsCompromise, // EXH-041 / 2026 Mar
+  cve202632202SpoofLure, // EXH-042 / 2026 Apr
+  copyFailKernel, // EXH-043 / 2026 Apr
+  panosUseridPortal0300, // EXH-044 / 2026 May
+  copyFailDirtyFrag, // EXH-045 / 2026 May
+  miniShaiHulud, // EXH-046 / 2026 May
+  aiAssistedAdminZeroDay, // EXH-047 / 2026 Jun
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));

@@ -23,6 +23,13 @@ export const wannacryRansomware: Scenario = {
   env: { USER: "analyst", SHELL: "/bin/sh", PWD: "/malware-lab/quarantine" },
   ps: ["  PID TTY TIME CMD", "  1 ?   0:01 systemd", "  88 tty1 0:00 sh"],
   history: ["ls"],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input CISA-ALERT.txt": "simulated safe tool replay for wannacry-eternalblue; replaces: cat CISA-ALERT.txt\n",
+    "python3 ir_toolkit.py parse-artifact --input strings-wannacry.txt": "simulated safe tool replay for wannacry-eternalblue; replaces: cat strings-wannacry.txt\n",
+    "python3 ir_toolkit.py extract-ioc --ioc ms17 --input strings-wannacry.txt": "simulated safe tool replay for wannacry-eternalblue; replaces: grep -inF ms17 strings-wannacry.txt\n",
+    "dig +short iuqerfsodp9ifjaposdfjhgosurijfaewrwergwea.com A":
+      "NXDOMAIN\n(simulated: public analyses described the worm probing this killswitch domain)\n",
+  },
   files: {
     "/malware-lab/quarantine/strings-wannacry.txt": {
       content: [
@@ -51,32 +58,68 @@ export const wannacryRansomware: Scenario = {
         "Lesson: disable SMBv1 everywhere; segment legacy; offline backup",
       ].join("\n"),
     },
+    // Post-Mandiant / MS17-010 public summaries described grooming via large NT Trans + malformed Trans2 secondary.
+    "/malware-lab/quarantine/public-poc/eternalblue_smb_stage_note.txt": {
+      content: [
+        "MS17-010 / EternalBlue (CVE-2017-0144)  SMBv1 server path",
+        "",
+        "Public IR language (condensed):",
+        "  1) SMB session setup to IPC$",
+        "  2) Large NT Trans request to move srv state machine",
+        "  3) Sequence of SMB_COM_TRANSACTION2_SECONDARY (0x33) with malformed",
+        "     offsets / counts → kernel pool corruption → RCE primitive",
+        "  4) Payload often delivered DoublePulsar-style for follow-on shellcode",
+        "",
+        "No exploit bytes in the museum; use MS17-010 patches and SMBv1 disablement.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "alert",
-      goal: "Read the CISA-style alert.",
-      hint: "`cat CISA-ALERT.txt`.",
-      matches: [{ kind: "exact", command: "cat CISA-ALERT.txt" }],
-      narration:
-        "EternalBlue + ransomware as a network service, propagation faster than most AV consoles could refresh.",
-    },
+          id: "dig-killswitch",
+          goal: "Resolve the killswitch-style domain from public WannaCry write-ups (simulated NXDOMAIN).",
+          hint: "`dig +short iuqerfsodp9ifjaposdfjhgosurijfaewrwergwea.com A`.",
+          matches: [
+            {
+              kind: "exact",
+              command: "dig +short iuqerfsodp9ifjaposdfjhgosurijfaewrwergwea.com A",
+            },
+          ],
+          narration:
+            "EternalBlue + ransomware as a network service, propagation faster than most AV consoles could refresh.",
+        },
     {
-      id: "strings",
-      goal: "Read the strings excerpt.",
-      hint: "`cat strings-wannacry.txt`.",
-      matches: [{ kind: "exact", command: "cat strings-wannacry.txt" }],
-      narration:
-        "Ms17010, SMB paths, mutex names, and the absurd kill-switch URL, all visible without disassembly if you know what to look for.",
-    },
+          id: "alert",
+          goal: "Read the CISA-style alert.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input CISA-ALERT.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input CISA-ALERT.txt" }],
+          narration:
+            "The alert frames MS17-010, SMBv1, and why a single DNS answer changed outbreak velocity.",
+        },
     {
-      id: "grep-ms17",
-      goal: "Find the bulletin reference in the strings file.",
-      hint: "`grep -inF ms17 strings-wannacry.txt`.",
-      matches: [{ kind: "exact", command: "grep -inF ms17 strings-wannacry.txt" }],
-      narration:
-        "MS17-010 is the patch boundary. Unpatched SMBv1 is the structural reason the worm moved like smoke.",
-    },
+          id: "strings",
+          goal: "Read the strings excerpt.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input strings-wannacry.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input strings-wannacry.txt" }],
+          narration:
+            "Ms17010, SMB paths, mutex names, and the absurd kill-switch URL, all visible without disassembly if you know what to look for.",
+        },
+    {
+          id: "grep-ms17",
+          goal: "Find the bulletin reference in the strings file.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc ms17 --input strings-wannacry.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc ms17 --input strings-wannacry.txt" }],
+          narration:
+            "MS17-010 is the patch boundary. Unpatched SMBv1 is the structural reason the worm moved like smoke.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/eternalblue_smb_stage_note.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/eternalblue_smb_stage_note.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

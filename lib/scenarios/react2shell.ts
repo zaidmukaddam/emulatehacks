@@ -5,7 +5,7 @@ export const react2shell: Scenario = {
   exhibit: "EXH-035",
   title: "React2Shell",
   tagline:
-    "The morning of December 4th, 2025. A critical RSC vulnerability is on the front page. Your app is on Next 15.4. You have an hour before standup.",
+    "The morning of December 4th, 2025. Access logs show odd Flight-shaped POSTs hitting production overnight. Only after you chase the noise do you match it to the React2Shell advisory.",
   category: "incident-response",
   difficulty: "advanced",
   era: "2020s",
@@ -15,11 +15,11 @@ export const react2shell: Scenario = {
   cwd: "/srv/forge-web",
   user: "responder",
   host: "edge-prod-02",
-  role: "On-call SRE for a SaaS app running Next.js. The advisory dropped overnight. You have a production app to triage before anyone else is awake.",
+  role: "On-call SRE for a SaaS app running Next.js. Logs looked wrong before the CVE name trended online.",
   objective:
-    "Confirm whether your app is exposed, find any evidence of pre-patch exploitation in the access logs, and prepare the rollout plan, all from defensive logs only.",
+    "Trace the suspicious RSC POSTs in logs, correlate parser failures, prove the App Router blast radius, and verify containment evidence.",
   briefing:
-    "CVE-2025-66478 was disclosed at 11:00 PT on December 3rd, 2025. The Next.js advisory describes 'an insecure deserialization vulnerability where the server fails to properly validate the structure of incoming RSC payloads.' Affected: Next.js 15.x, 16.x, and 14.3.0-canary.77+ when the App Router is used. Not affected: Pages Router, Edge Runtime, Next 13.x, Next 14.x stable. You inherited this app three months ago. Start by figuring out what version it actually runs.",
+    "At 03:00 UTC the CDN already showed bursts of `rsc=1` POSTs that do not match normal product traffic. Work like IR: prove the noisy clients, prove the stack, identify the quiet session, then verify deploy and secret-rotation containment.",
   env: {
     USER: "responder",
     SHELL: "/bin/sh",
@@ -35,27 +35,23 @@ export const react2shell: Scenario = {
     "  411 pts/0    00:00:00 ps",
   ],
   history: ["pwd", "ls"],
-  files: {
-    "/srv/forge-web/ADVISORY.md": {
-      content: [
-        "CVE-2025-66478, React Server Components",
-        "",
-        "Disclosed: Dec 3 2025, 11:00 PT",
-        "Affected: Next.js 15.x, 16.x, 14.3.0-canary.77+ (App Router only)",
-        "Not affected: Pages Router, Edge Runtime, Next 13.x, Next 14.x stable",
-        "Severity: CVSS 9.8 (network, no auth, RCE)",
-        "Fix: npx fix-react2shell-next  (see https://github.com/vercel-labs/fix-react2shell-next)",
-        "",
-        "Triage order:",
-        "  1) confirm your app is on an affected major + uses App Router",
-        "  2) check access logs for RSC POSTs you do not recognise",
-        "  3) plan the patch + secret rotation if the app was online before patch ship",
-        "",
-        "Be careful: there are PoCs floating around that invoke _vm, _child_process,",
-        "_fs. Per the disclosing researcher, a real exploit does not need any of",
-        "those. Treat the absence of those signatures as no evidence either way.",
+  commands: {
+    "tshark -r evidence.pcap -Y 'frame contains \"rsc-1\"' --follow-log /var/log/nginx/access.log": "simulated safe tool replay for react2shell-rsc; replaces: grep -nF rsc=1 /var/log/nginx/access.log\n",
+    "tshark -r evidence.pcap --follow-log /var/log/forge-web/app.log": "simulated safe tool replay for react2shell-rsc; replaces: cat /var/log/forge-web/app.log\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"probe\"' --follow-log /var/log/nginx/access.log": "simulated safe tool replay for react2shell-rsc; replaces: grep -nF __probe__ /var/log/nginx/access.log\n",
+    "jq . package.json": "simulated safe tool replay for react2shell-rsc; replaces: cat package.json\n",
+    "npm exec tsx-audit -- app/layout.tsx": "simulated safe tool replay for react2shell-rsc; replaces: cat app/layout.tsx\n",
+    "node --check next.config.mjs": "simulated safe tool replay for react2shell-rsc; replaces: cat next.config.mjs\n",
+    "python3 ir_toolkit.py parse-artifact --input forensics/session-198.51.100.207.txt": "simulated safe tool replay for react2shell-rsc; replaces: cat forensics/session-198.51.100.207.txt\n",
+    "tshark -r evidence.pcap --follow-log containment/deploy.log": "simulated safe tool replay for react2shell-rsc; replaces: cat containment/deploy.log\n",
+    "curl -sI -X POST https://forge.app/dashboard -H 'Next-Action: __probe__' -H 'RSC: 1'":
+      [
+        "HTTP/2 500",
+        "server: tabletop-nginx",
+        "x-rsc-probe: rejected-after-parser (simulated)",
       ].join("\n"),
-    },
+  },
+  files: {
     "/srv/forge-web/package.json": {
       content: [
         "{",
@@ -115,98 +111,143 @@ export const react2shell: Scenario = {
         "2025-12-04T04:11:34Z error  rsc-protocol  invalid Flight payload at /pricing (action=__probe__)",
       ].join("\n"),
     },
-    "/srv/forge-web/PATCH-PLAN.md": {
+    "/srv/forge-web/forensics/session-198.51.100.207.txt": {
       content: [
-        "patch plan, fill in as you investigate",
+        "source=198.51.100.207",
+        "first_seen=2025-12-04T04:02:01Z",
+        "route=/dashboard",
+        "action_id=00d7c6e1f0",
+        "classification=quiet-targeted-rsc-post",
+      ].join("\n"),
+    },
+    "/srv/forge-web/containment/deploy.log": {
+      content: [
+        "2025-12-04T06:12Z deploy=forge-web-1.18.5 patched_react_server=true",
+        "2025-12-04T06:18Z rotate_secret SESSION_SIGNING_KEY success",
+        "2025-12-04T06:19Z rotate_secret DATABASE_URL success",
+        "2025-12-04T06:25Z waf rule block rsc=1 unknown-action success",
+      ].join("\n"),
+    },
+    // CVE-2025-55182 / Next.js CVE-2025-66478  multipart Flight abuse shape (December 2025 disclosures).
+    "/srv/forge-web/public-poc/cve_2025_55182_flight_probe.py": {
+      content: [
+        "#!/usr/bin/env python3",
+        '"""',
+        "Laboratory multipart layout matching public Flight RCE proof-of-concept postings.",
+        "Do not aim at hosts you do not own. Museum copy for forensic comparison only.",
+        '"""',
         "",
-        "[ ] confirmed Next major:        ___________",
-        "[ ] confirmed App Router in use: ___________",
-        "[ ] suspicious RSC POSTs:        ___________",
-        "[ ] earliest suspicious request: ___________",
-        "[ ] secret rotation required:    yes / no",
-        "[ ] patch command to run:        ___________",
+        "# requests.post(url, files={...}) where JSON keys abuse prototype chains in vulnerable builds.",
+        "PAYLOAD_FIELDS = {",
+        '    "0": (None, \'{"then":"$1:__proto__:constructor:constructor"}\'),',
+        '    "1": (None, \'{"x":1}\'),',
+        "}",
         "",
-        "fill these in by reading the files and access log around you.",
+        'HEADERS = {"Next-Action": "malicious-flight-lab", "RSC": "1"}',
+        "",
+        "",
+        "# def probe(url):",
+        "#     import requests",
+        "#     requests.post(url, headers=HEADERS, files=PAYLOAD_FIELDS, timeout=5)",
       ].join("\n"),
     },
   },
   steps: [
     {
-      id: "advisory",
-      goal: "Read the advisory note for context.",
-      hint: "`cat ADVISORY.md`.",
-      matches: [{ kind: "exact", command: "cat ADVISORY.md" }],
-      narration:
-        "App Router only. CVSS 9.8. Patched via the official codemod. Ignore PoCs, the disclosing researcher said the obvious _vm / _child_process signatures aren't needed for a real exploit.",
-    },
-    {
-      id: "version",
-      goal: "Confirm which Next major your app is running.",
-      hint: "`cat package.json` and look at the `next` dependency.",
-      matches: [{ kind: "exact", command: "cat package.json" }],
-      narration: "Next 15.4.2. Squarely in the affected range.",
-    },
-    {
-      id: "router",
-      goal: "Confirm the app uses the App Router (not Pages Router).",
-      hint:
-        "If `app/layout.tsx` exists, it is App Router. `cat app/layout.tsx`.",
-      matches: [{ kind: "exact", command: "cat app/layout.tsx" }],
-      narration:
-        "App Router confirmed. Pages Router and the Edge Runtime are not affected, App Router on Node is the vulnerable surface.",
-    },
-    {
-      id: "config",
-      goal: "Skim the next.config to rule out the edge runtime.",
-      hint: "`cat next.config.mjs`.",
-      matches: [{ kind: "exact", command: "cat next.config.mjs" }],
-      narration:
-        "Standalone output, no edge runtime. Vulnerable.",
-    },
-    {
-      id: "find-rsc",
-      goal: "Search the access log for RSC POSTs to surface anything unusual.",
-      hint: "`grep -nF rsc=1 /var/log/nginx/access.log`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF rsc=1 /var/log/nginx/access.log",
+          id: "curl-rsc",
+          goal: "Send a minimal RSC-shaped POST with curl and read status headers (simulated).",
+          hint: "`curl -sI -X POST https://forge.app/dashboard -H 'Next-Action: __probe__' -H 'RSC: 1'`.",
+          matches: [
+            {
+              kind: "exact",
+              command:
+                "curl -sI -X POST https://forge.app/dashboard -H 'Next-Action: __probe__' -H 'RSC: 1'",
+            },
+          ],
+          narration:
+            "At 03:00 UTC the CDN already showed bursts of `rsc=1` POSTs. Curl proves the edge still answers RSC-shaped probes before you mine logs.",
         },
-      ],
-      narration:
-        "Two distinct sources. 198.51.100.207 to /dashboard with a real-looking action ID. 192.0.2.55 to /pricing with the literal string `__probe__` as the action, that one is a scanner.",
-    },
     {
-      id: "app-log",
-      goal: "Cross-reference with the app log for protocol errors.",
-      hint: "`cat /var/log/forge-web/app.log`.",
-      matches: [
-        { kind: "exact", command: "cat /var/log/forge-web/app.log" },
-      ],
-      narration:
-        "All four entries say `invalid Flight payload`. The server rejected the malformed payload, but the advisory is clear: rejection alone is not safety. Some payload shapes were accepted into vulnerable code paths.",
-    },
-    {
-      id: "find-payload",
-      goal: "Audit the access log for the canonical scanner string.",
-      hint: "`grep -nF __probe__ /var/log/nginx/access.log`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF __probe__ /var/log/nginx/access.log",
+          id: "find-rsc",
+          phase: "Recon",
+          goal: "Search the access log for RSC POST markers that surfaced in the nightly alert.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"rsc-1\"' --follow-log /var/log/nginx/access.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"rsc-1\"' --follow-log /var/log/nginx/access.log" }],
+          narration:
+            "Two actors stand out. 198.51.100.207 hits `/dashboard` with a real-looking `next-action` id. 192.0.2.55 hammers `/pricing` with the literal `__probe__` marker, classic scanner noise mixed with a possible targeted attempt.",
         },
-      ],
-      narration:
-        "Three hits from 192.0.2.55, two user-agents. Mass-scanner behaviour. You can't tell from the log alone whether the dashboard POST from .207 was benign or malicious, assume malicious since the app was unpatched. That triggers the rotation.",
-    },
     {
-      id: "patch-plan",
-      goal: "Open the patch plan checklist and prepare to fill it in.",
-      hint: "`cat PATCH-PLAN.md`.",
-      matches: [{ kind: "exact", command: "cat PATCH-PLAN.md" }],
-      narration:
-        "Three blanks you can answer now: Next 15.4.2, App Router yes, suspicious RSC POSTs from 198.51.100.207 and 192.0.2.55. Run `npx fix-react2shell-next`, redeploy, and rotate every secret reachable from server actions before standup. Document the window: app was online unpatched between 03:00 PT Dec 3 and now.",
-    },
+          id: "app-log",
+          phase: "Initial access",
+          goal: "Correlate HTTP noise with server-side parser failures.",
+          hint: "`tshark -r evidence.pcap --follow-log /var/log/forge-web/app.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log /var/log/forge-web/app.log" }],
+          narration:
+            "Every line reads `invalid Flight payload`. Rejection does not mean safety: the advisory is about malformed payloads that still reach dangerous code paths. Treat these timestamps as the start of a credible exploitation window.",
+        },
+    {
+          id: "find-payload",
+          phase: "Persistence",
+          goal: "Pull out the loudest automated probe so you can separate scanner traffic from human-shaped sessions.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"probe\"' --follow-log /var/log/nginx/access.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"probe\"' --follow-log /var/log/nginx/access.log" }],
+          narration:
+            "Three quick hits from 192.0.2.55. Fingerprinted tooling. The harder question is the quieter `.207` source on `/dashboard`, keep that one in the compromise column until patched.",
+        },
+    {
+          id: "version",
+          phase: "Impact",
+          goal: "Prove the running app pins a vulnerable Next.js major.",
+          hint: "`jq . package.json`.",
+          matches: [{ kind: "exact", command: "jq . package.json" }],
+          narration:
+            "Next 15.4.2 on the App Router path you are about to confirm. That lands squarely in the affected set from the advisory.",
+        },
+    {
+          id: "router",
+          phase: "Impact",
+          goal: "Show the App Router entrypoint exists.",
+          hint: "`npm exec tsx-audit -- app/layout.tsx`.",
+          matches: [{ kind: "exact", command: "npm exec tsx-audit -- app/layout.tsx" }],
+          narration:
+            "App Router confirmed. Pages Router-only apps were out of scope for this CVE, yours is not.",
+        },
+    {
+          id: "config",
+          phase: "Impact",
+          goal: "Skim the next.config to rule out the edge runtime.",
+          hint: "`node --check next.config.mjs`.",
+          matches: [{ kind: "exact", command: "node --check next.config.mjs" }],
+          narration:
+            "Standalone output, no edge runtime. Node App Router, the vulnerable combination called out in the advisory.",
+        },
+    {
+          id: "session",
+          phase: "Detection",
+          goal:
+            "Open the quiet source summary so you do not confuse scanner noise with targeted traffic.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input forensics/session-198.51.100.207.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input forensics/session-198.51.100.207.txt" }],
+          narration:
+            "The loud `__probe__` source is useful, but the quiet dashboard source is where you preserve evidence and rotate secrets.",
+        },
+    {
+          id: "containment",
+          phase: "Containment",
+          goal: "Verify patched deploy, secret rotation, and WAF containment evidence.",
+          hint: "`tshark -r evidence.pcap --follow-log containment/deploy.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log containment/deploy.log" }],
+          narration:
+            "The fix is deploy plus rotation plus edge guard. That closes the loop after the investigation proves real RSC traffic reached a vulnerable App Router build.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/cve_2025_55182_flight_probe.py`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/cve_2025_55182_flight_probe.py" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

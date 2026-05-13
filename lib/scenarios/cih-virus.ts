@@ -17,12 +17,27 @@ export const cihVirus: Scenario = {
   host: "iso-pc",
   role: "AV analyst reconstructing a submitted sample flagged by a reseller in Seoul.",
   objective:
-    "Identify the payload class, its trigger date, and why antivirus heuristics called it CIH / Chernobyl.",
+    "Fingerprint the PE with file and strings, confirm the trigger date, then skim the vendor-style advisory.",
   briefing:
     "A floppy arrived with cracked games. One binary is `CIH.EXE`, parasitic, infects other PE headers, no mass mailer. The scary part is what happens on a specific calendar day. You have strings and a disassembler summary, not a live infected machine.",
   env: { USER: "analyst", SHELL: "/bin/sh", PWD: "/home/analyst" },
   ps: ["  PID TTY TIME CMD", "  101 tty1 0:00 login", "  220 tty1 0:00 sh"],
   history: ["ls"],
+  commands: {
+    "python3 ir_toolkit.py extract-ioc --ioc day-26 --input STRINGS.txt": "simulated safe tool replay for cih-chernobyl; replaces: grep -nF day=26 STRINGS.txt\n",
+    "strings CIH.EXE": [
+      "--- strings CIH.EXE (simulated excerpt) ---",
+      "GetProcAddress",
+      "KERNEL32.dll",
+      "VWIN32.DMI.CpuData",
+      "CIH v1.2 TTIT",
+      "XOR loops on flash regions",
+      "payload activation: year=1998 month=4 day=26",
+      "Win9x only, tries VxD ring-0 port I/O to chipset",
+    ].join("\n"),
+    "file CIH.EXE":
+      "CIH.EXE: PE32 executable (GUI) Intel 80386, for MS Windows, UPX compressed (simulated)",
+  },
   files: {
     "/home/analyst/STRINGS.txt": {
       content: [
@@ -53,32 +68,57 @@ export const cihVirus: Scenario = {
         "  - watch for PE header corruption heuristics",
       ].join("\n"),
     },
+    "/home/analyst/public-poc/cih_trigger_pseudocode.c": {
+      content: [
+        "/* Museum sketch: CIH-style date gate + flash abuse (Win9x / VxD era). */",
+        "/* No working exploit; documents why April 26 mattered in press coverage. */",
+        "",
+        "typedef struct { unsigned y, m, d; } clock_trip;",
+        "",
+        "int should_arm_payload(clock_trip now) {",
+        "  return (now.y == 1998 && now.m == 4 && now.d == 26);",
+        "}",
+        "",
+        "void corrupt_bios_region(void) {",
+        "  /* Public write-ups: ring-0 port I/O against chipset flash on affected boards */",
+        "  /* ; real samples used VxD paths and size checks on flash geometry */",
+        "}",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "strings",
-      goal: "Read the simulated strings dump.",
-      hint: "`cat STRINGS.txt`.",
-      matches: [{ kind: "exact", command: "cat STRINGS.txt" }],
-      narration:
-        "Ring-0 VxD behaviour on Windows 9x, references to CPU data access, and an explicit trigger: 1998-04-26. This is not ransomware, it is hardware destruction layer.",
-    },
+          id: "file-pe",
+          goal: "Identify the submitted sample type.",
+          hint: "`file CIH.EXE`.",
+          matches: [{ kind: "exact", command: "file CIH.EXE" }],
+          narration:
+            "A Windows PE from the late 90s, often packed. Your sandbox would next extract and diff headers.",
+        },
     {
-      id: "advisory",
-      goal: "Read the advisory summary.",
-      hint: "`cat ADVISORY.txt`.",
-      matches: [{ kind: "exact", command: "cat ADVISORY.txt" }],
-      narration:
-        "CIH / Chernobyl. The payload is the story: timed activation + BIOS overwrite meant bricked towers across East Asia and elsewhere.",
-    },
+          id: "strings",
+          goal: "Run strings on the binary to surface API and trigger hints.",
+          hint: "`strings CIH.EXE`.",
+          matches: [{ kind: "exact", command: "strings CIH.EXE" }],
+          narration:
+            "Ring-0 VxD behaviour on Windows 9x, references to CPU data access, and an explicit trigger: 1998-04-26. This is not ransomware, it is hardware destruction layer.",
+        },
     {
-      id: "grep-trigger",
-      goal: "Search the strings file for the trigger date.",
-      hint: "`grep -nF 26 STRINGS.txt`.",
-      matches: [{ kind: "exact", command: "grep -nF 26 STRINGS.txt" }],
-      narration:
-        "April 26, the activation date. Calendar triggers teach one defensive lesson: behaviour on a quiet disk can still be catastrophic on one specific day.",
-    },
+          id: "grep-trigger",
+          goal: "Search the strings export for the trigger date.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc day-26 --input STRINGS.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc day-26 --input STRINGS.txt" }],
+          narration:
+            "April 26, the activation date. Calendar triggers teach one defensive lesson: behaviour on a quiet disk can still be catastrophic on one specific day.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/cih_trigger_pseudocode.c`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/cih_trigger_pseudocode.c" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

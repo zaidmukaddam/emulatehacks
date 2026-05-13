@@ -17,13 +17,27 @@ export const stuxnetSample: Scenario = {
   host: "lab-win",
   role: "Malware analyst documenting indicators before sharing with ICS-CERT.",
   objective:
-    "List the worm's unusual traits: PLC targets, driver signing abuse, and air-gap crossing, without ever running the binary.",
+    "Inspect a stolen code-signing cert with openssl, read IOCs and timeline, then grep for Siemens targets.",
   briefing:
     "This exhibit is document-only. You have hashes, imports, and timeline notes from Symantec / Langner-era public reporting. Your output is a short IOC list for the plant's incident bridge.",
   env: { USER: "reverse", SHELL: "/bin/sh", PWD: "/home/reverse" },
   ps: ["  PID TTY TIME CMD", "  1 ?   0:00 init", "  90 tty1 0:00 sh"],
   history: ["ls -la"],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input STUXNET-IOCS.txt": "simulated safe tool replay for stuxnet-plc; replaces: cat STUXNET-IOCS.txt\n",
+    "python3 ir_toolkit.py parse-artifact --input timeline.txt": "simulated safe tool replay for stuxnet-plc; replaces: cat timeline.txt\n",
+    "python3 ir_toolkit.py extract-ioc --ioc siemens --input STUXNET-IOCS.txt": "simulated safe tool replay for stuxnet-plc; replaces: grep -nF Siemens STUXNET-IOCS.txt\n",
+    "openssl x509 -in /home/reverse/stolen-realtek.pem -noout -subject -issuer": [
+      "subject=C = TW, ST = Taiwan, O = Realtek Semiconductor Corp, OU = Digital ID Class 3 - Microsoft Software Validation v2, CN = Realtek Semiconductor Corporation",
+      "issuer=C = US, O = VeriSign, Inc., OU = VeriSign Trust Network, OU = Terms of use at https://www.verisign.com/rpa (c)04, CN = VeriSign Class 3 Code Signing 2004 CA",
+      "(simulated: stolen cert chain used to sign kernel drivers in public reporting)",
+    ].join("\n"),
+  },
   files: {
+    "/home/reverse/stolen-realtek.pem": {
+      content:
+        "-----BEGIN CERTIFICATE-----\nSIMULATED_STUB_BASE64_LINE_1\n-----END CERTIFICATE-----\n",
+    },
     "/home/reverse/STUXNET-IOCS.txt": {
       content: [
         "Stuxnet, public IOCs (recreated summary, 2010)",
@@ -56,32 +70,65 @@ export const stuxnetSample: Scenario = {
         "2012-06 Natanz imagery correlates with drive speed changes, open source",
       ].join("\n"),
     },
+    "/home/reverse/public-poc/stuxnet_lnk_autorun_skeleton.txt": {
+      content: [
+        "# Public chain: crafted .lnk files (MS10-046) + autorun.inf on USB.",
+        "# Second stage: win32k + Task Scheduler privesc, stolen Realtek/JMicron signed drivers.",
+        "",
+        "[autorun]",
+        "open=stuxnet_installer.exe",
+        "",
+        "# Siemens side: s7otbxdx.dll replacement fingerprints Step7 projects (WinCC).",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "iocs",
-      goal: "Read the public IOC summary.",
-      hint: "`cat STUXNET-IOCS.txt`.",
-      matches: [{ kind: "exact", command: "cat STUXNET-IOCS.txt" }],
-      narration:
-        "Signed drivers carrying adversary code, the supply chain hit the trust model, not just the vendor download page. PLC modification is the headline.",
-    },
+          id: "openssl-cert",
+          goal: "Inspect the recreated stolen signing certificate metadata.",
+          hint: "`openssl x509 -in /home/reverse/stolen-realtek.pem -noout -subject -issuer`.",
+          matches: [
+            {
+              kind: "exact",
+              command:
+                "openssl x509 -in /home/reverse/stolen-realtek.pem -noout -subject -issuer",
+            },
+          ],
+          narration:
+            "Signed drivers carrying adversary code, the supply chain hit the trust model, not just the vendor download page. PLC modification is the headline.",
+        },
     {
-      id: "timeline",
-      goal: "Read the disclosure timeline.",
-      hint: "`cat timeline.txt`.",
-      matches: [{ kind: "exact", command: "cat timeline.txt" }],
-      narration:
-        "From odd Belarusian sample to confirmed industrial sabotage in months. Air-gapped sites were never off the graph.",
-    },
+          id: "iocs",
+          goal: "Read the public IOC summary.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input STUXNET-IOCS.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input STUXNET-IOCS.txt" }],
+          narration:
+            "Signed drivers carrying adversary code, the supply chain hit the trust model, not just the vendor download page. PLC modification is the headline.",
+        },
     {
-      id: "grep-siemens",
-      goal: "Find references to Siemens in the IOC file.",
-      hint: "`grep -nF Siemens STUXNET-IOCS.txt`.",
-      matches: [{ kind: "exact", command: "grep -nF Siemens STUXNET-IOCS.txt" }],
-      narration:
-        "Every serious Stuxnet discussion eventually lands on Step7 / WinCC, this was the first worm whose primary target was rotational machinery, not credit cards.",
-    },
+          id: "timeline",
+          goal: "Read the disclosure timeline.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input timeline.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input timeline.txt" }],
+          narration:
+            "From odd Belarusian sample to confirmed industrial sabotage in months. Air-gapped sites were never off the graph.",
+        },
+    {
+          id: "grep-siemens",
+          goal: "Find references to Siemens in the IOC file.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc siemens --input STUXNET-IOCS.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc siemens --input STUXNET-IOCS.txt" }],
+          narration:
+            "Every serious Stuxnet discussion eventually lands on Step7 / WinCC, this was the first worm whose primary target was rotational machinery, not credit cards.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/stuxnet_lnk_autorun_skeleton.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/stuxnet_lnk_autorun_skeleton.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

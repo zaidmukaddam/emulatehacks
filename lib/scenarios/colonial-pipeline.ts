@@ -24,6 +24,21 @@ export const colonialPipeline: Scenario = {
   env: { USER: "ot-ir", SHELL: "/bin/sh", PWD: "/tabletop/colonial-shape" },
   ps: ["  PID TTY TIME CMD", "  12 ?   0:00 sh"],
   history: [],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input CISA-ALERT-stub.txt": "simulated safe tool replay for colonial-pipeline-ransom; replaces: cat CISA-ALERT-stub.txt\n",
+    "tshark -r evidence.pcap --follow-log vpn-audit.log": "simulated safe tool replay for colonial-pipeline-ransom; replaces: cat vpn-audit.log\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"migrate-svc\"' --follow-log vpn-audit.log": "simulated safe tool replay for colonial-pipeline-ransom; replaces: grep -nF migrate_svc vpn-audit.log\n",
+    "python3 safe_replay.py --scenario colonial-pipeline-ransom --artifact read_me_txt.stub": "simulated safe tool replay for colonial-pipeline-ransom; replaces: cat read_me_txt.stub\n",
+    "nmap -Pn -p445,443 10.70.4.12":
+      [
+        "Starting Nmap (simulated)",
+        "PORT    STATE SERVICE",
+        "445/tcp open  microsoft-ds",
+        "443/tcp open  https",
+        "Host script results:",
+        "| smb-vuln-ms17-010: NOT VULNERABLE (tabletop stub)",
+      ].join("\n"),
+  },
   files: {
     "/tabletop/colonial-shape/CISA-ALERT-stub.txt": {
       content: [
@@ -49,40 +64,65 @@ export const colonialPipeline: Scenario = {
         "If you call media first, we delete keys, blah blah (textbook DarkSide-shaped note)",
       ].join("\n"),
     },
+    "/tabletop/colonial-shape/public-poc/darkside_affiliate_ttp_stub.txt": {
+      content: [
+        "# Public TTPs: RaaS panel, double extortion, Cobalt Strike / PS remoting chains.",
+        "# Initial access in many cases: exposed VPN + stolen creds (not PLC 0-day).",
+        "",
+        "# Museum PowerShell hunt pattern (illustrative):",
+        "# Get-WinEvent -FilterHashtable @{LogName='Security'; ID=4624} | ? {$_.Message -match 'migrate_svc'}",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "cisa",
-      goal: "Read the alert stub.",
-      hint: "`cat CISA-ALERT-stub.txt`.",
-      matches: [{ kind: "exact", command: "cat CISA-ALERT-stub.txt" }],
-      narration:
-        "OT consequence, IT root cause, air gaps are marketing, segmentation is engineering.",
-    },
+          id: "nmap-edge",
+          goal: "Scan the jump host netblock anchor from the VPN log (simulated nmap).",
+          hint: "`nmap -Pn -p445,443 10.70.4.12`.",
+          matches: [{ kind: "exact", command: "nmap -Pn -p445,443 10.70.4.12" }],
+          narration:
+            "OT consequence, IT root cause, air gaps are marketing, segmentation is engineering.",
+        },
     {
-      id: "vpn",
-      goal: "Inspect the VPN audit excerpt.",
-      hint: "`cat vpn-audit.log`.",
-      matches: [{ kind: "exact", command: "cat vpn-audit.log" }],
-      narration:
-        "`mfa=NONE` on a service account that can reach RDP, that's the whole novel in one field.",
-    },
+          id: "cisa",
+          goal: "Read the alert stub.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input CISA-ALERT-stub.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input CISA-ALERT-stub.txt" }],
+          narration:
+            "DarkSide-shaped playbook, but the real lesson is VPN posture before ransomware detonates.",
+        },
     {
-      id: "grep-migrate",
-      goal: "Surface lines for the compromised service account.",
-      hint: "`grep -nF migrate_svc vpn-audit.log`.",
-      matches: [{ kind: "exact", command: "grep -nF migrate_svc vpn-audit.log" }],
-      narration:
-        "Timeline matters: first VPN OK, then SMB, you could have killed sessions between those timestamps with proper session monitoring.",
-    },
+          id: "vpn",
+          goal: "Inspect the VPN audit excerpt.",
+          hint: "`tshark -r evidence.pcap --follow-log vpn-audit.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log vpn-audit.log" }],
+          narration:
+            "`mfa=NONE` on a service account that can reach RDP, that's the whole novel in one field.",
+        },
     {
-      id: "note",
-      goal: "Read the synthetic ransom note stub.",
-      hint: "`cat read_me_txt.stub`.",
-      matches: [{ kind: "exact", command: "cat read_me_txt.stub" }],
-      narration:
-        "The business sees this; you see VPN lines, bridge both in the executive briefing.",
-    },
+          id: "grep-migrate",
+          goal: "Surface lines for the compromised service account.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"migrate-svc\"' --follow-log vpn-audit.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"migrate-svc\"' --follow-log vpn-audit.log" }],
+          narration:
+            "Timeline matters: first VPN OK, then SMB, you could have killed sessions between those timestamps with proper session monitoring.",
+        },
+    {
+          id: "note",
+          goal: "Read the synthetic ransom note stub.",
+          hint: "`python3 safe_replay.py --scenario colonial-pipeline-ransom --artifact read_me_txt.stub`.",
+          matches: [{ kind: "exact", command: "python3 safe_replay.py --scenario colonial-pipeline-ransom --artifact read_me_txt.stub" }],
+          narration:
+            "The business sees this; you see VPN lines, bridge both in the executive briefing.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/darkside_affiliate_ttp_stub.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/darkside_affiliate_ttp_stub.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

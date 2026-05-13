@@ -24,6 +24,13 @@ export const citrixBleed: Scenario = {
   env: { USER: "netsec", SHELL: "/bin/sh", PWD: "/adc/citrix-tabletop" },
   ps: ["  PID TTY TIME CMD", "  9 ?   0:00 sh"],
   history: [],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input CVE-2023-4966-stub.txt": "simulated safe tool replay for citrix-bleed-token; replaces: cat CVE-2023-4966-stub.txt\n",
+    "tshark -r evidence.pcap --follow-log http_errors.log": "simulated safe tool replay for citrix-bleed-token; replaces: cat http_errors.log\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"openid-configuration\"' --follow-log http_errors.log": "simulated safe tool replay for citrix-bleed-token; replaces: grep -nF openid-configuration http_errors.log\n",
+    "curl -sk https://citrix.edge/oauth/idp/.well-known/openid-configuration":
+      '{"issuer":"https://citrix.edge/oauth/idp","authorization_endpoint":"https://citrix.edge/oauth/authorize"}\n(simulated OIDC metadata; public IR correlated bursts with token abuse)\n',
+  },
   files: {
     "/adc/citrix-tabletop/CVE-2023-4966-stub.txt": {
       content: [
@@ -42,37 +49,69 @@ export const citrixBleed: Scenario = {
         '2023-10-19T09:15:02Z 203.0.113.20 "GET /oauth/idp/.well-known/openid-configuration" 200 cookie="NSC_AAAC=\\xe3\\x9a\\xff..." len=431',
       ].join("\n"),
     },
+    // CVE-2023-4966 header over-read / session token leak pattern (public scanner logic, stubbed).
+    "/adc/citrix-tabletop/public-poc/cve_2023_4966_leak_probe_stub.py": {
+      content: [
+        "#!/usr/bin/env python3",
+        '"""',
+        "CitrixBleed (CVE-2023-4966) returned bytes past the proper header boundary; defenders grepped for",
+        "NetScaler cookie markers (NSC_*) in suspicious responses. Museum stub only.",
+        '"""',
+        "",
+        "LEAK_MARKERS = (b'NSC_AAAC', b'NSC_USER', b'NSC_TMAS')",
+        "",
+        "",
+        "# def looks_like_token_leak(body: bytes) -> bool:",
+        "#     return any(marker in body[:8192] for marker in LEAK_MARKERS)",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "cve",
-      goal: "Read the CitrixBleed summary stub.",
-      hint: "`cat CVE-2023-4966-stub.txt`.",
-      matches: [{ kind: "exact", command: "cat CVE-2023-4966-stub.txt" }],
-      narration:
-        "Not SQLi, pure memory disclosure. Your WAF will not save you; patch + mass session kill will.",
-    },
-    {
-      id: "slice",
-      goal: "Read the HTTP error / debug log slice.",
-      hint: "`cat http_errors.log`.",
-      matches: [{ kind: "exact", command: "cat http_errors.log" }],
-      narration:
-        "Same source IP hammering OIDC metadata, staging for token harvest scripts.",
-    },
-    {
-      id: "grep",
-      goal: "Surface lines about openid-configuration.",
-      hint: "`grep -nF openid-configuration http_errors.log`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF openid-configuration http_errors.log",
+          id: "curl-oidc",
+          goal: "Fetch OIDC metadata over TLS with curl -k (simulated JSON).",
+          hint: "`curl -sk https://citrix.edge/oauth/idp/.well-known/openid-configuration`.",
+          matches: [
+            {
+              kind: "exact",
+              command: "curl -sk https://citrix.edge/oauth/idp/.well-known/openid-configuration",
+            },
+          ],
+          narration:
+            "Not SQLi, pure memory disclosure. Your WAF will not save you; patch + mass session kill will.",
         },
-      ],
-      narration:
-        "IOCs move faster than CVSS scores, watch for behavioural patterns, not only file hashes.",
-    },
+    {
+          id: "cve",
+          goal: "Read the CitrixBleed summary stub.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input CVE-2023-4966-stub.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input CVE-2023-4966-stub.txt" }],
+          narration:
+            "Session tokens are bearer secrets; disclosure bugs turn MFA into theatre.",
+        },
+    {
+          id: "slice",
+          goal: "Read the HTTP error / debug log slice.",
+          hint: "`tshark -r evidence.pcap --follow-log http_errors.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log http_errors.log" }],
+          narration:
+            "Same source IP hammering OIDC metadata, staging for token harvest scripts.",
+        },
+    {
+          id: "grep",
+          goal: "Surface lines about openid-configuration.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"openid-configuration\"' --follow-log http_errors.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"openid-configuration\"' --follow-log http_errors.log" }],
+          narration:
+            "IOCs move faster than CVSS scores, watch for behavioural patterns, not only file hashes.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/cve_2023_4966_leak_probe_stub.py`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/cve_2023_4966_leak_probe_stub.py" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

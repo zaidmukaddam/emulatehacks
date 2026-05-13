@@ -24,6 +24,13 @@ export const miraiBotnet: Scenario = {
   env: { USER: "researcher", SHELL: "/bin/sh", PWD: "/honeypot/mirai-era" },
   ps: ["  PID TTY TIME CMD", "  404 pts/0 0:00 sh"],
   history: ["ls"],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input MIRAI-README.txt": "simulated safe tool replay for mirai-iot-dyn; replaces: cat MIRAI-README.txt\n",
+    "tshark -r evidence.pcap --follow-log session-4481.log": "simulated safe tool replay for mirai-iot-dyn; replaces: cat session-4481.log\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"busybox\"' --follow-log session-4481.log": "simulated safe tool replay for mirai-iot-dyn; replaces: grep -nF busybox session-4481.log\n",
+    "nc -zv 203.0.113.77 23":
+      "Connection to 203.0.113.77 23 port [tcp/telnet] succeeded! (simulated)\n",
+  },
   files: {
     "/honeypot/mirai-era/MIRAI-README.txt": {
       content: [
@@ -46,32 +53,62 @@ export const miraiBotnet: Scenario = {
         "CLOSED: timeout",
       ].join("\n"),
     },
+    "/honeypot/mirai-era/public-poc/mirai_telnet_guess_patterns.txt": {
+      content: [
+        "# Patterns from leaked Mirai source / analyst notes (museum summary).",
+        "# Scanner: SYN to 23, 2323; login brute with embedded dict.",
+        "",
+        "root xc3511",
+        "admin admin",
+        "root vizxv",
+        "root pass",
+        "support support",
+        "",
+        "# Payload: wget|echo|chmod to multi-arch dirs under http://host/bins/*",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "readme",
-      goal: "Read the reconstruction README.",
-      hint: "`cat MIRAI-README.txt`.",
-      matches: [{ kind: "exact", command: "cat MIRAI-README.txt" }],
-      narration:
-        "Credential stuffing at internet scale, CVEs optional when defaults are public.",
-    },
+          id: "nc-telnet",
+          goal: "Confirm telnet on a Mirai-era scanner IP is reachable (simulated).",
+          hint: "`nc -zv 203.0.113.77 23`.",
+          matches: [{ kind: "exact", command: "nc -zv 203.0.113.77 23" }],
+          narration:
+            "Credential stuffing at internet scale, CVEs optional when defaults are public.",
+        },
     {
-      id: "session",
-      goal: "Read a captured telnet session.",
-      hint: "`cat session-4481.log`.",
-      matches: [{ kind: "exact", command: "cat session-4481.log" }],
-      narration:
-        "`wget …/mips`, architecture-specific dropper lists mirroring Mirai's `/bins/` tree in public analysis.",
-    },
+          id: "readme",
+          goal: "Read the reconstruction README.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input MIRAI-README.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input MIRAI-README.txt" }],
+          narration:
+            "Mirai-era recon starts with open telnet and a password list, not a novel heap bug.",
+        },
     {
-      id: "grep-busybox",
-      goal: "Find lines referencing busybox.",
-      hint: "`grep -nF busybox session-4481.log`.",
-      matches: [{ kind: "exact", command: "grep -nF busybox session-4481.log" }],
-      narration:
-        "Post-exploitation often still looks like shell + wget, even on cameras.",
-    },
+          id: "session",
+          goal: "Read a captured telnet session.",
+          hint: "`tshark -r evidence.pcap --follow-log session-4481.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log session-4481.log" }],
+          narration:
+            "`wget …/mips`, architecture-specific dropper lists mirroring Mirai's `/bins/` tree in public analysis.",
+        },
+    {
+          id: "grep-busybox",
+          goal: "Find lines referencing busybox.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"busybox\"' --follow-log session-4481.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"busybox\"' --follow-log session-4481.log" }],
+          narration:
+            "Post-exploitation often still looks like shell + wget, even on cameras.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/mirai_telnet_guess_patterns.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/mirai_telnet_guess_patterns.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

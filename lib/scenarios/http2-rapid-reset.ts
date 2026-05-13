@@ -24,6 +24,18 @@ export const http2RapidReset: Scenario = {
   env: { USER: "sre", SHELL: "/bin/sh", PWD: "/cdn/rapid-reset-drill" },
   ps: ["  PID TTY TIME CMD", "  44 ?   0:11 envoy"],
   history: [],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input CVE-2023-44487-brief.txt": "simulated safe tool replay for http2-rapid-reset; replaces: cat CVE-2023-44487-brief.txt\n",
+    "python3 ir_toolkit.py table-summary --input edge-60s.tsv": "simulated safe tool replay for http2-rapid-reset; replaces: cat edge-60s.tsv\n",
+    "python3 safe_replay.py --scenario http2-rapid-reset --grep 12440 --artifact edge-60s.tsv": "simulated safe tool replay for http2-rapid-reset; replaces: grep -nF 12440 edge-60s.tsv\n",
+    "curl -sI --http2 https://rapid-reset.lab/":
+      [
+        "HTTP/2 503",
+        "server: tabletop-envoy",
+        "x-rst-storm: 12440/sec",
+        "(simulated: edge signals RST_STREAM churn during Rapid Reset class attacks)",
+      ].join("\n"),
+  },
   files: {
     "/cdn/rapid-reset-drill/CVE-2023-44487-brief.txt": {
       content: [
@@ -43,32 +55,60 @@ export const http2RapidReset: Scenario = {
         "2023-10-10T14:02:00Z\t4102\t14002\t210\t0.33",
       ].join("\n"),
     },
+    "/cdn/rapid-reset-drill/public-poc/h2_rst_stream_flood_pseudocode.py": {
+      content: [
+        "# CVE-2023-44487: cancel many streams immediately after opening (Rapid Reset).",
+        "# Educational skeleton only; do not aim at systems you do not own.",
+        "",
+        "# for i in range(N):",
+        "#     send_headers(stream_id=2*i+1, end_headers=True, end_stream=False)",
+        "#     send_rst_stream(stream_id=2*i+1, error_code=NO_ERROR)",
+        "",
+        "# Proxies that charged full request cost per half-open stream were worst-hit.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "brief",
-      goal: "Read the CVE / attack brief.",
-      hint: "`cat CVE-2023-44487-brief.txt`.",
-      matches: [{ kind: "exact", command: "cat CVE-2023-44487-brief.txt" }],
-      narration:
-        "Protocol design met economics, cancellation was supposed to be cheap; attackers made it expensive.",
-    },
+          id: "curl-h2",
+          goal: "Probe the origin with HTTP/2 headers (simulated RST storm banner).",
+          hint: "`curl -sI --http2 https://rapid-reset.lab/`.",
+          matches: [{ kind: "exact", command: "curl -sI --http2 https://rapid-reset.lab/" }],
+          narration:
+            "Protocol design met economics, cancellation was supposed to be cheap; attackers made it expensive.",
+        },
     {
-      id: "metrics",
-      goal: "Inspect the 60-second edge metrics slice.",
-      hint: "`cat edge-60s.tsv`.",
-      matches: [{ kind: "exact", command: "cat edge-60s.tsv" }],
-      narration:
-        "`rst_per_sec` jumps 10× while connections barely double, classic cancellation storm.",
-    },
+          id: "brief",
+          goal: "Read the CVE / attack brief.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input CVE-2023-44487-brief.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input CVE-2023-44487-brief.txt" }],
+          narration:
+            "Coordinated disclosure memo sets language your execs will repeat on earnings calls.",
+        },
     {
-      id: "grep-spike",
-      goal: "Pull only lines where RST/s exceeds 1000.",
-      hint: "`grep -nF 12440 edge-60s.tsv`.",
-      matches: [{ kind: "exact", command: "grep -nF 12440 edge-60s.tsv" }],
-      narration:
-        "Tabletop uses a literal threshold line; production would alert on rate derivatives.",
-    },
+          id: "metrics",
+          goal: "Inspect the 60-second edge metrics slice.",
+          hint: "`python3 ir_toolkit.py table-summary --input edge-60s.tsv`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py table-summary --input edge-60s.tsv" }],
+          narration:
+            "`rst_per_sec` jumps 10× while connections barely double, classic cancellation storm.",
+        },
+    {
+          id: "grep-spike",
+          goal: "Pull only lines where RST/s exceeds 1000.",
+          hint: "`python3 safe_replay.py --scenario http2-rapid-reset --grep 12440 --artifact edge-60s.tsv`.",
+          matches: [{ kind: "exact", command: "python3 safe_replay.py --scenario http2-rapid-reset --grep 12440 --artifact edge-60s.tsv" }],
+          narration:
+            "Tabletop uses a literal threshold line; production would alert on rate derivatives.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/h2_rst_stream_flood_pseudocode.py`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/h2_rst_stream_flood_pseudocode.py" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

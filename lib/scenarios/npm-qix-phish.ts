@@ -15,11 +15,11 @@ export const npmQixPhish: Scenario = {
   cwd: "/srv/forge-app",
   user: "responder",
   host: "build-runner-04",
-  role: "On-call engineer for a Node app that builds in CI several times a day. The advisory thread on Hacker News is two hours old and still moving.",
+  role: "On-call engineer for a Node app that builds in CI several times a day. Your manager forwards an internal alert before you open Hacker News.",
   objective:
-    "Decide whether your app installed any of the malicious versions in the last 24 hours, and what to do if it did.",
+    "Trace the phishing-driven npm supply-chain incident from the internal alert to contaminated lockfile lines, prove which CI runs pulled the poison during the live window, then read the remediation note your security team drafted.",
   briefing:
-    "On September 8, 2025, attackers phished Josh Junon (npm: qix), the maintainer of 18 widely-used packages including chalk, debug, ansi-styles, supports-color, and strip-ansi. They published one malicious version of each. The injected code looked for crypto-wallet API calls in browser-shipped bundles and rewrote the destination address before the user signed the transaction. The bad versions were live for roughly 2.5 hours before npm pulled them. Your CI runs `npm ci` on every PR. Walk your lockfile and your CI history.",
+    "September 8, 2025. An operations channel posts that npm yanked malicious versions of chalk, debug, and sixteen other packages after maintainer qix was phished. The published payload targeted browser wallets. Your builds still run `npm ci` hourly. You need the full chain: alert, dependency pins, lockfile proof, CI windowing, then cleanup guidance, not a dry reading of semver ranges.",
   env: {
     USER: "responder",
     SHELL: "/bin/bash",
@@ -35,14 +35,38 @@ export const npmQixPhish: Scenario = {
     "  411 pts/0    00:00:00 ps",
   ],
   history: ["pwd", "ls"],
+  commands: {
+    "python3 advisory_triage.py --input ALERT.md": "simulated safe tool replay for npm-qix-phish; replaces: cat ALERT.md\n",
+    "jq . package.json": "simulated safe tool replay for npm-qix-phish; replaces: cat package.json\n",
+    "npm audit signatures --json --package chalk": "simulated safe tool replay for npm-qix-phish; replaces: grep -nF chalk package-lock.json\n",
+    "npm audit signatures --json --package debug": "simulated safe tool replay for npm-qix-phish; replaces: grep -nF debug package-lock.json\n",
+    "tshark -r evidence.pcap --follow-log ci-history.log": "simulated safe tool replay for npm-qix-phish; replaces: cat ci-history.log\n",
+    "python3 advisory_triage.py --input ADVISORY.md": "simulated safe tool replay for npm-qix-phish; replaces: cat ADVISORY.md\n",
+    "python3 advisory_triage.py --summary REMEDIATION.md": "simulated safe tool replay for npm-qix-phish; replaces: head -20 REMEDIATION.md\n",
+    "npm view chalk@5.6.1 version":
+      "5.6.1\n(simulated: confirms the poison semver was servable from the registry during IR)\n",
+  },
   files: {
+    "/srv/forge-app/ALERT.md": {
+      content: [
+        "Forge security alert, Sep 8 2025 15:05 UTC",
+        "",
+        "Subject: npm maintainer phishing → malicious publishes on chalk, debug, ansi-styles, …",
+        "Window: malicious versions reportedly live ~13:16-15:45 UTC (npm pulled them after).",
+        "",
+        "Action for app teams:",
+        "  - Inspect lockfiles for the bad semver-exact versions in the mirrored advisory.",
+        "  - Any CI `npm ci` inside the window must be treated as producing tainted artifacts.",
+        "  - Browser bundles: invalidate CDN if a build overlapped the window.",
+      ].join("\n"),
+    },
     "/srv/forge-app/ADVISORY.md": {
       content: [
         "Sept 8 2025, npm supply-chain compromise (qix maintainer)",
         "",
         "Vector:    phishing email impersonating npm support to Josh Junon (qix).",
         "           Attackers pushed one bad version of each of 18 packages.",
-        "Window:    ~2.5 hours, roughly 13:16–15:45 UTC.",
+        "Window:    ~2.5 hours, roughly 13:16-15:45 UTC.",
         "Payload:   browser-side; intercepts wallet RPC calls (window.ethereum,",
         "           solana.signAndSendTransaction, ...) and rewrites the",
         "           destination address before the user confirms.",
@@ -122,69 +146,110 @@ export const npmQixPhish: Scenario = {
         "2025-09-08T18:33:18Z run.id=8888 trigger=push      branch=main             npm ci ok (87s)",
       ].join("\n"),
     },
+    "/srv/forge-app/REMEDIATION.md": {
+      content: [
+        "Forge remediation note (draft)",
+        "",
+        "1) Bump to known-good versions from advisory (chalk 5.6.0 / debug 4.4.1 here).",
+        "2) Delete node_modules + dist, regenerate lockfile from clean npm cache mirror.",
+        "3) Rebuild every branch touched by CI runs during the malicious window.",
+        "4) Purge CDN edge caches for any JS shipped from those builds.",
+        "5) Require npm OIDC or WebAuthn for publishing; scope CI tokens read-only except release job.",
+      ].join("\n"),
+    },
+    "/srv/forge-app/public-poc/npm_wallet_rpc_hook_stub.js": {
+      content: [
+        "// Educational fragment: Sep 2025 npm incident targeted browser wallets.",
+        "// Malicious package post-install / entry hooked provider APIs (museum paraphrase).",
+        "",
+        "// const orig = window.ethereum.request;",
+        "// window.ethereum.request = async (args) => { /* rewrite tx.to */ return orig(args); };",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "advisory",
-      goal: "Read the advisory note.",
-      hint: "`cat ADVISORY.md`.",
-      matches: [{ kind: "exact", command: "cat ADVISORY.md" }],
-      narration:
-        "Bad versions are exact: chalk 5.6.1, debug 4.4.2, strip-ansi 7.1.1, supports-color 10.2.1. The window is 13:16–15:45 UTC. Two questions: lockfile, and CI runs during the window.",
-    },
-    {
-      id: "package",
-      goal: "Read the package.json to see what your app depends on.",
-      hint: "`cat package.json`.",
-      matches: [{ kind: "exact", command: "cat package.json" }],
-      narration:
-        "Caret ranges on chalk and debug. That means `npm ci` resolves whatever version was tip-of-major when the lockfile was last updated. The lockfile is what actually matters.",
-    },
-    {
-      id: "lockfile-chalk",
-      goal: "Search the lockfile for chalk.",
-      hint: "`grep -nF chalk package-lock.json`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF chalk package-lock.json",
+          id: "npm-view-chalk",
+          goal: "Query the compromised chalk semver directly (simulated npm view).",
+          hint: "`npm view chalk@5.6.1 version`.",
+          matches: [{ kind: "exact", command: "npm view chalk@5.6.1 version" }],
+          narration:
+            "The npm view output confirms the bad semver was real on the registry during the incident window.",
         },
-      ],
-      narration:
-        "chalk pinned to 5.6.1, the bad version. So is debug 4.4.2. Your lockfile is contaminated.",
-    },
     {
-      id: "lockfile-debug",
-      goal: "Confirm by searching for debug.",
-      hint: "`grep -nF debug package-lock.json`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF debug package-lock.json",
+          id: "alert",
+          phase: "Recon",
+          goal:
+            "Read the internal alert that names the maintainer phishing vector and the rough malicious window.",
+          hint: "`python3 advisory_triage.py --input ALERT.md`.",
+          matches: [{ kind: "exact", command: "python3 advisory_triage.py --input ALERT.md" }],
+          narration:
+            "You already know this is credential theft on a human, not a registry protocol flaw. The interesting IR question is whether your automation pulled the bad tarballs while they were still served.",
         },
-      ],
-      narration:
-        "Confirmed: debug 4.4.2. Two of the eighteen are in your lock.",
-    },
     {
-      id: "ci-window",
-      goal:
-        "Walk the CI history and find any `npm ci` that ran during 13:16–15:45 UTC on Sept 8.",
-      hint: "`cat ci-history.log`.",
-      matches: [{ kind: "exact", command: "cat ci-history.log" }],
-      narration:
-        "Three runs land inside the window: 8884 at 13:25, 8885 at 14:08, 8886 at 14:51. The two earlier runs (09:11 and 11:42) installed the older, clean, versions. The two later runs (16:14, 18:33) ran after npm pulled the bad versions, but `npm ci` honours the lockfile, so they would also have pulled the bad versions. Conclusion: every run from 8884 onward installed contaminated chalk + debug into a build artifact.",
-    },
+          id: "package",
+          phase: "Recon",
+          goal: "Read package.json ranges that feed into the lockfile snapshot.",
+          hint: "`jq . package.json`.",
+          matches: [{ kind: "exact", command: "jq . package.json" }],
+          narration:
+            "Carets on chalk and debug tell you almost nothing during an incident. The lockfile is the ground truth.",
+        },
     {
-      id: "fix",
-      goal:
-        "Confirm what the fix looks like before you start typing.",
-      hint:
-        "Set the bad versions to known-good in the lockfile and reinstall. There is no command to run here, read the answer back from the advisory.",
-      matches: [{ kind: "exact", command: "cat ADVISORY.md" }],
-      narration:
-        "Pin chalk to 5.6.0 and debug to 4.4.1 (the last known-good in your range), regenerate the lockfile, and rebuild. Because the payload was browser-side and wallet-targeted, the urgent question for a non-crypto app is: did any user load a build whose JS bundle was generated by a contaminated CI run? If yes, invalidate those bundles at the CDN before you do anything else. The wallet-rewrite payload activates only on signed transactions, so general-purpose web users were not directly harmed, but their installed JS still contains the malicious code until you ship a clean bundle.",
-    },
+          id: "lockfile-chalk",
+          phase: "Initial access",
+          goal: "Prove whether the lockfile pins a malicious chalk version.",
+          hint: "`npm audit signatures --json --package chalk`.",
+          matches: [{ kind: "exact", command: "npm audit signatures --json --package chalk" }],
+          narration:
+            "chalk 5.6.1 is on the attacker-published line. That means every `npm ci` resolved that tarball until you change the lock.",
+        },
+    {
+          id: "lockfile-debug",
+          phase: "Initial access",
+          goal: "Confirm the second poisoned dependency the alert called out.",
+          hint: "`npm audit signatures --json --package debug`.",
+          matches: [{ kind: "exact", command: "npm audit signatures --json --package debug" }],
+          narration:
+            "debug 4.4.2 matches the same wave. Two packages, one phishing story.",
+        },
+    {
+          id: "ci-window",
+          phase: "Impact",
+          goal:
+            "List CI runs and mark which ones executed while npm still served the bad versions.",
+          hint: "`tshark -r evidence.pcap --follow-log ci-history.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log ci-history.log" }],
+          narration:
+            "Runs 8884-8886 fall inside ~13:16-15:45 UTC. Earlier runs were clean snapshots; later runs still reinstall whatever the lock pins, so downstream artifact purge stays mandatory.",
+        },
+    {
+          id: "advisory",
+          phase: "Detection",
+          goal:
+            "Cross-check version numbers against the mirrored npm advisory your team saved.",
+          hint: "`python3 advisory_triage.py --input ADVISORY.md`.",
+          matches: [{ kind: "exact", command: "python3 advisory_triage.py --input ADVISORY.md" }],
+          narration:
+            "The advisory spells exact semver matches and payload behaviour: wallet RPC hooking in browser bundles. That steers customer comms: crypto teams panic, everyone else still rewrites caches.",
+        },
+    {
+          id: "remediation",
+          phase: "Lessons",
+          goal: "Read the drafted remediation checklist you owe delivery managers.",
+          hint: "`python3 advisory_triage.py --summary REMEDIATION.md`.",
+          matches: [{ kind: "exact", command: "python3 advisory_triage.py --summary REMEDIATION.md" }],
+          narration:
+            "Rebuild, re-lock, purge CDN, then fix the org problem: maintainer accounts and CI publish tokens need tighter scopes than you used during the incident window.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/npm_wallet_rpc_hook_stub.js`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/npm_wallet_rpc_hook_stub.js" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

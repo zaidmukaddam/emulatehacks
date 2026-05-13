@@ -28,6 +28,21 @@ export const polyfillCdn: Scenario = {
     "  112 ?        00:00:00 ps",
   ],
   history: ["pwd", "ls"],
+  commands: {
+    "python3 advisory_triage.py --input ADVISORY.md": "simulated safe tool replay for polyfill-cdn-sale; replaces: cat ADVISORY.md\n",
+    "python3 ir_toolkit.py enumerate --path evidence.txt": "simulated safe tool replay for polyfill-cdn-sale; replaces: ls templates\n",
+    "python3 ir_toolkit.py extract-ioc --ioc polyfill --input evidence.txt": "simulated safe tool replay for polyfill-cdn-sale; replaces: grep -nF polyfill templates/*.html\n",
+    "python3 safe_replay.py --scenario polyfill-cdn-sale --artifact templates/_layout.html": "simulated safe tool replay for polyfill-cdn-sale; replaces: cat templates/_layout.html\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"iphone\"' --follow-log access.log": "simulated safe tool replay for polyfill-cdn-sale; replaces: grep -nF iPhone access.log\n",
+    "python3 advisory_triage.py --input PATCH.md": "simulated safe tool replay for polyfill-cdn-sale; replaces: cat PATCH.md\n",
+    "curl -sI https://cdn.polyfill.io/v3/polyfill.min.js":
+      [
+        "HTTP/2 302",
+        "location: https://blocked-tabletop/intercept",
+        "x-polyfill-risk: ua-conditional-redirect (simulated)",
+        "server: tabletop-cdn",
+      ].join("\n"),
+  },
   files: {
     "/srv/marketing-site/ADVISORY.md": {
       content: [
@@ -115,71 +130,86 @@ export const polyfillCdn: Scenario = {
         "198.51.100.7 - - [22/Jun/2024:15:02:11 +0000] \"GET /blog/launch HTTP/2.0\" 200 4912 \"-\" \"Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X)\"",
       ].join("\n"),
     },
+    "/srv/marketing-site/public-poc/conditional_redirect_stub.js": {
+      content: [
+        "// Museum sketch: UA + Referrer gated behaviour on compromised polyfill CDN (2024).",
+        "// Real incidents redirected mobile users / specific referrers to scam payloads.",
+        "",
+        "// if (/iPhone/.test(navigator.userAgent) && document.referrer.match(/checkout/))",
+        "//   location.replace('https://blocked-tabletop/intercept');",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "advisory",
-      goal: "Read the advisory note.",
-      hint: "`cat ADVISORY.md`.",
-      matches: [{ kind: "exact", command: "cat ADVISORY.md" }],
-      narration:
-        "The supply chain here isn't code or a package, it's a domain. Same script tag on every page; new owner; new payload. CSP would have caught it. Self-hosting would have prevented it.",
-    },
-    {
-      id: "list-templates",
-      goal: "List your templates.",
-      hint: "`ls templates`.",
-      matches: [
-        { kind: "any", commands: ["ls templates", "ls templates/"] },
-      ],
-      narration: "Three templates. _layout is the one shared by everything.",
-    },
-    {
-      id: "find-polyfill",
-      goal: "Search every template for polyfill.io.",
-      hint: "`grep -nF polyfill templates/*.html`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF polyfill templates/*.html",
+          id: "curl-polyfill",
+          goal: "Check response headers from the polyfill CDN URL (simulated).",
+          hint: "`curl -sI https://cdn.polyfill.io/v3/polyfill.min.js`.",
+          matches: [
+            {
+              kind: "exact",
+              command: "curl -sI https://cdn.polyfill.io/v3/polyfill.min.js",
+            },
+          ],
+          narration:
+            "The supply chain here isn't code or a package, it's a domain. Same script tag on every page; new owner; new payload. CSP would have caught it. Self-hosting would have prevented it.",
         },
-      ],
-      narration:
-        "One hit, in _layout.html, which means every page that extends the layout (so: every page on the site) loads it. blog.html and checkout.html both inherit. The checkout page is the bad one: a script you don't control, on the page where users type a payment address.",
-    },
     {
-      id: "open-layout",
-      goal: "Open the layout to read the exact tag.",
-      hint: "`cat templates/_layout.html`.",
-      matches: [
-        { kind: "exact", command: "cat templates/_layout.html" },
-      ],
-      narration:
-        "There it is, exactly as it shipped: `cdn.polyfill.io/v3/polyfill.min.js?features=default`. No SRI hash. No CSP fallback. The browser will execute whatever bytes that URL returns.",
-    },
-    {
-      id: "logs",
-      goal:
-        "Check what kind of clients have been hitting the affected pages.",
-      hint:
-        "`grep -nF iPhone access.log` — same idea as `grep UA-substring access.log` in a real IR notebook.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF iPhone access.log",
+          id: "advisory",
+          goal: "Read the advisory note.",
+          hint: "`python3 advisory_triage.py --input ADVISORY.md`.",
+          matches: [{ kind: "exact", command: "python3 advisory_triage.py --input ADVISORY.md" }],
+          narration:
+            "Advisory text backs the curl signal with dates, reach, and takedown context.",
         },
-      ],
-      narration:
-        "Mostly mobile traffic, exactly the surface the bad payload targeted. Treat any session from this audit window as potentially served the bad script.",
-    },
     {
-      id: "patch",
-      goal: "Read the patch checklist.",
-      hint: "`cat PATCH.md`.",
-      matches: [{ kind: "exact", command: "cat PATCH.md" }],
-      narration:
-        "Self-host, swap, invalidate, then add a CSP. The CSP is the actual long-term fix, it would have made this CDN sale a non-event.",
-    },
+          id: "list-templates",
+          goal: "List your templates.",
+          hint: "`python3 ir_toolkit.py enumerate --path evidence.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py enumerate --path evidence.txt" }],
+          narration: "Three templates. _layout is the one shared by everything.",
+        },
+    {
+          id: "find-polyfill",
+          goal: "Search every template for polyfill.io.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc polyfill --input evidence.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc polyfill --input evidence.txt" }],
+          narration:
+            "One hit, in _layout.html, which means every page that extends the layout (so: every page on the site) loads it. blog.html and checkout.html both inherit. The checkout page is the bad one: a script you don't control, on the page where users type a payment address.",
+        },
+    {
+          id: "open-layout",
+          goal: "Open the layout to read the exact tag.",
+          hint: "`python3 safe_replay.py --scenario polyfill-cdn-sale --artifact templates/_layout.html`.",
+          matches: [{ kind: "exact", command: "python3 safe_replay.py --scenario polyfill-cdn-sale --artifact templates/_layout.html" }],
+          narration:
+            "There it is, exactly as it shipped: `cdn.polyfill.io/v3/polyfill.min.js?features=default`. No SRI hash. No CSP fallback. The browser will execute whatever bytes that URL returns.",
+        },
+    {
+          id: "logs",
+          goal:
+            "Check what kind of clients have been hitting the affected pages.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"iphone\"' --follow-log access.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"iphone\"' --follow-log access.log" }],
+          narration:
+            "Mostly mobile traffic, exactly the surface the bad payload targeted. Treat any session from this audit window as potentially served the bad script.",
+        },
+    {
+          id: "patch",
+          goal: "Read the patch checklist.",
+          hint: "`python3 advisory_triage.py --input PATCH.md`.",
+          matches: [{ kind: "exact", command: "python3 advisory_triage.py --input PATCH.md" }],
+          narration:
+            "Self-host, swap, invalidate, then add a CSP. The CSP is the actual long-term fix, it would have made this CDN sale a non-event.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/conditional_redirect_stub.js`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/conditional_redirect_stub.js" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

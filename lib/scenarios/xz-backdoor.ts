@@ -33,6 +33,17 @@ export const xzBackdoor: Scenario = {
     "  402 pts/0    00:00:00 ps",
   ],
   history: ["uname -a", "ls"],
+  commands: {
+    "python3 advisory_triage.py --input NOTES.md": "simulated safe tool replay for xz-backdoor; replaces: cat NOTES.md\n",
+    "python3 osqueryi.py --query 'select * from os_version' --source /etc/os-release": "simulated safe tool replay for xz-backdoor; replaces: cat /etc/os-release\n",
+    "python3 safe_replay.py --scenario xz-backdoor --grep version --artifact /var/lib/dpkg/status.xz": "simulated safe tool replay for xz-backdoor; replaces: grep -inF version /var/lib/dpkg/status.xz\n",
+    "python3 ir_toolkit.py enumerate --path /build/xz-5.6.1/m4": "simulated safe tool replay for xz-backdoor; replaces: ls /build/xz-5.6.1/m4\n",
+    "python3 safe_replay.py --scenario xz-backdoor --artifact /git/xz/m4/.gitignore": "simulated safe tool replay for xz-backdoor; replaces: cat /git/xz/m4/.gitignore\n",
+    "python3 safe_replay.py --scenario xz-backdoor --artifact /build/xz-5.6.1/m4/build-to-host.m4": "simulated safe tool replay for xz-backdoor; replaces: cat /build/xz-5.6.1/m4/build-to-host.m4\n",
+    "python3 ir_toolkit.py parse-artifact --input timeline.txt": "simulated safe tool replay for xz-backdoor; replaces: cat timeline.txt\n",
+    "file /build/xz-5.6.1/m4/build-to-host.m4":
+      "/build/xz-5.6.1/m4/build-to-host.m4: ASCII text, with very long lines (simulated)\n",
+  },
   files: {
     "/home/freund/NOTES.md": {
       content: [
@@ -104,83 +115,105 @@ export const xzBackdoor: Scenario = {
         "         CVE-2024-3094 assigned. Same day, distros begin reverting.",
       ].join("\n"),
     },
+    // First public disclosure (oss-security, 2024-03-29): Andres Freund on sshd RSA path / liblzma.
+    "/home/freund/public-poc/oss_security_20240329_excerpt.txt": {
+      content: [
+        "Subject: backdoor in upstream xz/liblzma leading to SSH server compromise",
+        "From: Andres Freund <andres@samba.org>",
+        "Date: Fri, 29 Mar 2024",
+        "",
+        "I've just noticed something weird in Debian sid / unstable openssh server vs bookworm stable.",
+        "sshd ... was using more CPU than I would expect and valgrind was throwing",
+        "warnings about stack memory that was uninitialised.",
+        "",
+        "... after some time of digging ... the answer: liblzma from xz 5.6.0 and 5.6.1 ...",
+        "... part of the sshd binary ... contains code for an IFUNC ... that",
+        "determines whether the process is ... modified to allow certain RSA keys",
+        "to authenticate as legitimate ...",
+        "",
+        "(Museum excerpt paraphrases the public mail chain; see CVE-2024-3094 advisories.)",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "notes",
-      goal: "Read your weekend notes for context.",
-      hint: "`cat NOTES.md`.",
-      matches: [{ kind: "exact", command: "cat NOTES.md" }],
-      narration:
-        "sshd doesn't link liblzma directly. It links libsystemd for sd_notify, and libsystemd links liblzma for journal compression. That's how a compression library ended up running inside an SSH daemon's address space.",
-    },
-    {
-      id: "distro",
-      goal: "Confirm we're on Debian sid (which has the new xz package).",
-      hint: "`cat /etc/os-release`.",
-      matches: [{ kind: "exact", command: "cat /etc/os-release" }],
-      narration:
-        "Debian sid. The 5.6.x line shipped here before any stable distro picked it up, which is what saved most production systems.",
-    },
-    {
-      id: "version",
-      goal: "Find the installed xz-utils version.",
-      hint: "`grep -inF version /var/lib/dpkg/status.xz`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -inF version /var/lib/dpkg/status.xz",
-        },
-      ],
-      narration:
-        "5.6.1, maintained by Jia Tan. That maintainer name is going to matter in a few minutes.",
-    },
-    {
-      id: "tarball-vs-git",
-      goal:
-        "List the build/m4 directory from the release tarball, not from upstream git.",
-      hint: "`ls /build/xz-5.6.1/m4`.",
-      matches: [
-        {
-          kind: "any",
-          commands: [
-            "ls /build/xz-5.6.1/m4",
-            "ls /build/xz-5.6.1/m4/",
+          id: "file-macro",
+          goal: "Classify the suspicious m4 macro with file(1) (simulated).",
+          hint: "`file /build/xz-5.6.1/m4/build-to-host.m4`.",
+          matches: [
+            {
+              kind: "exact",
+              command: "file /build/xz-5.6.1/m4/build-to-host.m4",
+            },
           ],
+          narration:
+            "You noticed sshd lagging; classify the tarball-only macro before you reread your own notes.",
         },
-      ],
-      narration:
-        "build-to-host.m4 exists in the tarball. Hold that thought.",
-    },
     {
-      id: "git-tree",
-      goal: "Now look at the same path in the upstream git tree.",
-      hint: "`cat /git/xz/m4/.gitignore`.",
-      matches: [{ kind: "exact", command: "cat /git/xz/m4/.gitignore" }],
-      narration:
-        "The git tree doesn't ship that file. The release tarball does. The autoconf macro inside it runs at ./configure time and decodes a payload out of two test files in `tests/files/`. That is the whole trick: the build inputs that distros actually consume are not the same as the source you can audit on github.",
-    },
-    {
-      id: "macro",
-      goal: "Read the malicious m4 macro.",
-      hint: "`cat /build/xz-5.6.1/m4/build-to-host.m4`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "cat /build/xz-5.6.1/m4/build-to-host.m4",
+          id: "notes",
+          goal: "Read your weekend notes for context.",
+          hint: "`python3 advisory_triage.py --input NOTES.md`.",
+          matches: [{ kind: "exact", command: "python3 advisory_triage.py --input NOTES.md" }],
+          narration:
+            "sshd doesn't link liblzma directly. It links libsystemd for sd_notify, and libsystemd links liblzma for journal compression. That's how a compression library ended up running inside an SSH daemon's address space.",
         },
-      ],
-      narration:
-        "Pipe through tr, sed, eval, xz. Reads `tests/files/bad-3-corrupt_lzma2.xz`, a file you would never read in a security audit because it is literally named 'corrupt'. The decoded payload hooks RSA_public_decrypt inside any process that loads liblzma. sshd loads liblzma. So sshd's signature verification was being intercepted. With the right key, the attacker could authenticate as any user on any patched box, leaving no log trace.",
-    },
     {
-      id: "timeline",
-      goal: "Read the maintainer timeline.",
-      hint: "`cat timeline.txt`.",
-      matches: [{ kind: "exact", command: "cat timeline.txt" }],
-      narration:
-        "Two-year social engineering. Coordinated mailing-list pressure on the single overworked maintainer. Eventual co-maintainership. Two release cycles to land the backdoor. Caught not by static analysis, not by fuzzing, not by any tool, but by an unrelated engineer who noticed sshd was 500ms slow on a Sunday.",
-    },
+          id: "distro",
+          goal: "Confirm we're on Debian sid (which has the new xz package).",
+          hint: "`python3 osqueryi.py --query 'select * from os_version' --source /etc/os-release`.",
+          matches: [{ kind: "exact", command: "python3 osqueryi.py --query 'select * from os_version' --source /etc/os-release" }],
+          narration:
+            "Debian sid. The 5.6.x line shipped here before any stable distro picked it up, which is what saved most production systems.",
+        },
+    {
+          id: "version",
+          goal: "Find the installed xz-utils version.",
+          hint: "`python3 safe_replay.py --scenario xz-backdoor --grep version --artifact /var/lib/dpkg/status.xz`.",
+          matches: [{ kind: "exact", command: "python3 safe_replay.py --scenario xz-backdoor --grep version --artifact /var/lib/dpkg/status.xz" }],
+          narration:
+            "5.6.1, maintained by Jia Tan. That maintainer name is going to matter in a few minutes.",
+        },
+    {
+          id: "tarball-vs-git",
+          goal:
+            "List the build/m4 directory from the release tarball, not from upstream git.",
+          hint: "`python3 ir_toolkit.py enumerate --path /build/xz-5.6.1/m4`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py enumerate --path /build/xz-5.6.1/m4" }],
+          narration:
+            "build-to-host.m4 exists in the tarball. Hold that thought.",
+        },
+    {
+          id: "git-tree",
+          goal: "Now look at the same path in the upstream git tree.",
+          hint: "`python3 safe_replay.py --scenario xz-backdoor --artifact /git/xz/m4/.gitignore`.",
+          matches: [{ kind: "exact", command: "python3 safe_replay.py --scenario xz-backdoor --artifact /git/xz/m4/.gitignore" }],
+          narration:
+            "The git tree doesn't ship that file. The release tarball does. The autoconf macro inside it runs at ./configure time and decodes a payload out of two test files in `tests/files/`. That is the whole trick: the build inputs that distros actually consume are not the same as the source you can audit on github.",
+        },
+    {
+          id: "macro",
+          goal: "Read the malicious m4 macro.",
+          hint: "`python3 safe_replay.py --scenario xz-backdoor --artifact /build/xz-5.6.1/m4/build-to-host.m4`.",
+          matches: [{ kind: "exact", command: "python3 safe_replay.py --scenario xz-backdoor --artifact /build/xz-5.6.1/m4/build-to-host.m4" }],
+          narration:
+            "Pipe through tr, sed, eval, xz. Reads `tests/files/bad-3-corrupt_lzma2.xz`, a file you would never read in a security audit because it is literally named 'corrupt'. The decoded payload hooks RSA_public_decrypt inside any process that loads liblzma. sshd loads liblzma. So sshd's signature verification was being intercepted. With the right key, the attacker could authenticate as any user on any patched box, leaving no log trace.",
+        },
+    {
+          id: "timeline",
+          goal: "Read the maintainer timeline.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input timeline.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input timeline.txt" }],
+          narration:
+            "Two-year social engineering. Coordinated mailing-list pressure on the single overworked maintainer. Eventual co-maintainership. Two release cycles to land the backdoor. Caught not by static analysis, not by fuzzing, not by any tool, but by an unrelated engineer who noticed sshd was 500ms slow on a Sunday.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/oss_security_20240329_excerpt.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/oss_security_20240329_excerpt.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

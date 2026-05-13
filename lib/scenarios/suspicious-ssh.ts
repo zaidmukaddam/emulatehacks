@@ -30,6 +30,19 @@ export const suspiciousSsh: Scenario = {
     "  812 pts/0    00:00:00 sh",
   ],
   history: ["pwd", "ls"],
+  commands: {
+    "tshark -r evidence.pcap --follow-log auth.log": "simulated safe tool replay for suspicious-ssh-login; replaces: cat auth.log\n",
+    "ssh-keygen -lf /home/ci/.ssh/authorized_keys": "simulated safe tool replay for suspicious-ssh-login; replaces: cat /home/ci/.ssh/authorized_keys\n",
+    "python3 persistence_audit.py --crontab /var/spool/cron/crontabs/ci": "simulated safe tool replay for suspicious-ssh-login; replaces: cat /var/spool/cron/crontabs/ci\n",
+    "file /home/ci/.cache/.runner": "simulated safe tool replay for suspicious-ssh-login; replaces: cat /home/ci/.cache/.runner\n",
+    "whois 198.51.100.7":
+      [
+        "NetName: TABLETOP-TRANSIT",
+        "OrgName: Synthetic Transit AS",
+        "Country: XX",
+        "(simulated whois; map the SSH client IP before you open auth.log)",
+      ].join("\n"),
+  },
   files: {
     "/var/log/auth.log": {
       content: [
@@ -60,53 +73,74 @@ export const suspiciousSsh: Scenario = {
       content:
         "#!/bin/sh\n# beacon stub, fictional reconstruction\n# (would phone home; in this simulation it does nothing)\nexit 0\n",
     },
+    "/var/log/public-poc/persistence_authorized_keys_note.txt": {
+      content: [
+        "# Common post-SSH persistence: append attacker ed25519 to ~/.ssh/authorized_keys",
+        "# plus crontab @reboot or user-level systemd.",
+        "",
+        "command=\"/bin/false\",no-port-forwarding ssh-ed25519 AAAAC3NzaC1lZDI1NTE5... attacker",
+        "",
+        "# Hunt: diff authorized_keys against CMDB-issued keys; audit sshd -T for PermitUserEnvironment.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "open-auth",
-      goal: "Read the auth log.",
-      hint: "`cat auth.log` to see SSH events.",
-      matches: [{ kind: "exact", command: "cat auth.log" }],
-      narration:
-        "Two failed passwords, then a successful publickey login. The fingerprint does not match any key the team issued.",
-    },
+          id: "whois",
+          goal: "Look up the suspicious SSH source IP (simulated whois).",
+          hint: "`whois 198.51.100.7`.",
+          matches: [{ kind: "exact", command: "whois 198.51.100.7" }],
+          narration:
+            "Auth logs flagged a successful SSH login from an IP unknown to the team. The runner is offline pending investigation. Walk the logs and the filesystem. Do not assume the attacker is gone.",
+        },
     {
-      id: "find-key",
-      goal: "Find where authorized_keys lives on this box.",
-      hint: "Try `find / -name authorized_keys`.",
-      matches: [
-        { kind: "regex", pattern: "^find\\s+/.*authorized_keys.*$" },
-      ],
-      narration: "An extra key was appended to ci's authorized_keys.",
-    },
+          id: "open-auth",
+          goal: "Read the auth log.",
+          hint: "`tshark -r evidence.pcap --follow-log auth.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log auth.log" }],
+          narration:
+            "Two failed passwords, then a successful publickey login. The fingerprint does not match any key the team issued.",
+        },
     {
-      id: "read-key",
-      goal: "Read the authorized_keys file.",
-      hint: "`cat /home/ci/.ssh/authorized_keys`.",
-      matches: [
-        { kind: "exact", command: "cat /home/ci/.ssh/authorized_keys" },
-      ],
-      narration: "Two keys. One is yours. One is not.",
-    },
+          id: "find-key",
+          goal: "Find where authorized_keys lives on this box.",
+          hint: "Try `find / -name authorized_keys`.",
+          matches: [
+            { kind: "regex", pattern: "^find\\s+/.*authorized_keys.*$" },
+          ],
+          narration: "An extra key was appended to ci's authorized_keys.",
+        },
     {
-      id: "find-cron",
-      goal: "Find what they did with sudo.",
-      hint:
-        "The auth log mentions `crontab -e`. Look at the user crontab: `cat /var/spool/cron/crontabs/ci`.",
-      matches: [
-        { kind: "exact", command: "cat /var/spool/cron/crontabs/ci" },
-      ],
-      narration:
-        "A cron entry runs every seven minutes from a hidden cache folder. That is the persistence.",
-    },
+          id: "read-key",
+          goal: "Read the authorized_keys file.",
+          hint: "`ssh-keygen -lf /home/ci/.ssh/authorized_keys`.",
+          matches: [{ kind: "exact", command: "ssh-keygen -lf /home/ci/.ssh/authorized_keys" }],
+          narration: "Two keys. One is yours. One is not.",
+        },
     {
-      id: "inspect-payload",
-      goal: "Look at the payload it runs.",
-      hint: "`cat /home/ci/.cache/.runner`, note hidden file under .cache.",
-      matches: [{ kind: "exact", command: "cat /home/ci/.cache/.runner" }],
-      narration:
-        "In this reconstruction the payload is inert. In the real incident, this is where you would isolate the host, rotate ci's keys, and pivot to the build artifacts it produced.",
-    },
+          id: "find-cron",
+          goal: "Find what they did with sudo.",
+          hint: "`python3 persistence_audit.py --crontab /var/spool/cron/crontabs/ci`.",
+          matches: [{ kind: "exact", command: "python3 persistence_audit.py --crontab /var/spool/cron/crontabs/ci" }],
+          narration:
+            "A cron entry runs every seven minutes from a hidden cache folder. That is the persistence.",
+        },
+    {
+          id: "inspect-payload",
+          goal: "Look at the payload it runs.",
+          hint: "`file /home/ci/.cache/.runner`.",
+          matches: [{ kind: "exact", command: "file /home/ci/.cache/.runner" }],
+          narration:
+            "In this reconstruction the payload is inert. In the real incident, this is where you would isolate the host, rotate ci's keys, and pivot to the build artifacts it produced.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/persistence_authorized_keys_note.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/persistence_authorized_keys_note.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

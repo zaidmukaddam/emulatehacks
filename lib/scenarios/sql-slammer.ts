@@ -23,6 +23,17 @@ export const sqlSlammer: Scenario = {
   env: { USER: "dbadmin", SHELL: "/bin/sh", PWD: "/home/dbadmin" },
   ps: ["  PID TTY TIME CMD", "  1 ?   0:01 init", "  220 tty1 0:00 sh"],
   history: ["whoami"],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input pcap-summary.txt": "simulated safe tool replay for sql-slammer-worm; replaces: cat pcap-summary.txt\n",
+    "python3 ir_toolkit.py parse-artifact --input MS02-039.txt": "simulated safe tool replay for sql-slammer-worm; replaces: cat MS02-039.txt\n",
+    "python3 ir_toolkit.py extract-ioc --ioc 1434 --input pcap-summary.txt": "simulated safe tool replay for sql-slammer-worm; replaces: grep -nF 1434 pcap-summary.txt\n",
+    "tcpdump -nn -r /home/dbadmin/slammer.pcap udp port 1434": [
+      "reading from file /home/dbadmin/slammer.pcap",
+      "18:02:01.112233 IP 203.0.113.9.49152 > 198.51.100.2.1434: UDP, length 404",
+      "  0x0000: 0401 0101 0101 ... (simulated Slammer-style payload stub)",
+      "18:02:01.112401 IP 198.51.100.2.1434 > 203.0.113.9.49152: ICMP port unreachable",
+    ].join("\n"),
+  },
   files: {
     "/home/dbadmin/pcap-summary.txt": {
       content: [
@@ -51,32 +62,64 @@ export const sqlSlammer: Scenario = {
         "Released: July 2002, worms in Jan 2003 target unpatched fleet",
       ].join("\n"),
     },
+    "/home/dbadmin/public-poc/slammer_udp_1434_stub.hexnote.txt": {
+      content: [
+        "# UDP/1434 single-datagram exploitation (CVE-2002-0649), Jan 2003 worm.",
+        "# Public reversing showed ~376-byte UDP payload targeting SQL Resolution Service.",
+        "",
+        "# xxd-style stub head only (zeros / filler in real samples):",
+        "# 0401010101010101 ...  ; ssnetlib resolution packet grooming",
+        "",
+        "# Lesson: firewall UDP 1434 everywhere; MSDE defaults burned carriers.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "pcap",
-      goal: "Read the packet summary.",
-      hint: "`cat pcap-summary.txt`.",
-      matches: [{ kind: "exact", command: "cat pcap-summary.txt" }],
-      narration:
-        "UDP/1434, SQL Server's resolution service, not the TCP query port people firewall. Tiny payloads, huge amplification per infected host.",
-    },
+          id: "tcpdump",
+          goal: "Replay a canned tcpdump of UDP 1434 (SQL resolution service).",
+          hint: "`tcpdump -nn -r /home/dbadmin/slammer.pcap udp port 1434`.",
+          matches: [
+            {
+              kind: "exact",
+              command: "tcpdump -nn -r /home/dbadmin/slammer.pcap udp port 1434",
+            },
+          ],
+          narration:
+            "UDP/1434, SQL Server's resolution service, not the TCP query port people firewall. Tiny payloads, huge amplification per infected host.",
+        },
     {
-      id: "bulletin",
-      goal: "Read the Microsoft bulletin excerpt.",
-      hint: "`cat MS02-039.txt`.",
-      matches: [{ kind: "exact", command: "cat MS02-039.txt" }],
-      narration:
-        "The fix shipped six months before the worm. Slammer is the textbook cost of patch lag on internet-facing databases.",
-    },
+          id: "pcap",
+          goal: "Read the analyst packet summary.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input pcap-summary.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input pcap-summary.txt" }],
+          narration:
+            "Aggregate view of line-rate UDP/1434 and blast radius. Cross-check with the single-packet replay above.",
+        },
     {
-      id: "grep-port",
-      goal: "Search the summary for the vulnerable port.",
-      hint: "`grep -nF 1434 pcap-summary.txt`.",
-      matches: [{ kind: "exact", command: "grep -nF 1434 pcap-summary.txt" }],
-      narration:
-        "Every line that matters names 1434. Perimeter rules that only watched TCP left this hole wide open.",
-    },
+          id: "bulletin",
+          goal: "Read the Microsoft bulletin excerpt.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input MS02-039.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input MS02-039.txt" }],
+          narration:
+            "The fix shipped six months before the worm. Slammer is the textbook cost of patch lag on internet-facing databases.",
+        },
+    {
+          id: "grep-port",
+          goal: "Search the summary for the vulnerable port.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc 1434 --input pcap-summary.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc 1434 --input pcap-summary.txt" }],
+          narration:
+            "Every line that matters names 1434. Perimeter rules that only watched TCP left this hole wide open.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/slammer_udp_1434_stub.hexnote.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/slammer_udp_1434_stub.hexnote.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

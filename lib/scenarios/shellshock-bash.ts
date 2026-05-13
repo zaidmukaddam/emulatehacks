@@ -23,6 +23,13 @@ export const shellshockBash: Scenario = {
   env: { USER: "responder", SHELL: "/bin/bash", PWD: "/var/log/www-legacy" },
   ps: ["  PID TTY TIME CMD", "  301 ?   0:02 httpd", "  400 tty1 0:00 bash"],
   history: ["cd /var/log/www-legacy"],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input CVE-2014-6271.txt": "simulated safe tool replay for shellshock-bash; replaces: cat CVE-2014-6271.txt\n",
+    "tshark -r evidence.pcap --follow-log access.log": "simulated safe tool replay for shellshock-bash; replaces: cat access.log\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"step\"' --follow-log access.log": "simulated safe tool replay for shellshock-bash; replaces: grep -nF '() {' access.log\n",
+    "curl -s -A '() { :; }; echo SHELLSHOCK_PROBE' http://127.0.0.1/cgi-bin/status.sh":
+      "SHELLSHOCK_PROBE\nuname=Linux apache-bridge 3.13.0 #1 (simulated CGI bash fork)\n",
+  },
   files: {
     "/var/log/www-legacy/access.log": {
       content: [
@@ -47,32 +54,67 @@ export const shellshockBash: Scenario = {
         "     that does not fork bash for every request",
       ].join("\n"),
     },
+    // Public triage one-liner circulated with the Sep 2014 disclosure (oss-sec).
+    "/var/log/www-legacy/public-poc/shellshock_env_probe.sh": {
+      content: [
+        "#!/bin/sh",
+        '# CVE-2014-6271 local check: if "vulnerable" prints, bash parsed trailing code after exporting a function.',
+        "env 'x=() { :;}; echo vulnerable' bash -c \"echo this is a test\"",
+        "",
+        "# Remote shape (CGI): user input becomes env. Example header used in many write-ups:",
+        "#   User-Agent: () { :; }; /bin/id",
+        "",
+        "# Metasploit apache_mod_cgi Bash RCE module (Metasploit Framework) documents the same CGI header channel.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "cve",
-      goal: "Read the CVE note.",
-      hint: "`cat CVE-2014-6271.txt`.",
-      matches: [{ kind: "exact", command: "cat CVE-2014-6271.txt" }],
-      narration:
-        "Environment variables are not data, they are code under bash. CGI maps remote HTTP fields into that environment.",
-    },
+          id: "curl-probe",
+          goal: "Replay a safe curl probe that sends a classic Shellshock User-Agent to CGI.",
+          hint: "`curl -s -A '() { :; }; echo SHELLSHOCK_PROBE' http://127.0.0.1/cgi-bin/status.sh`.",
+          matches: [
+            {
+              kind: "exact",
+              command:
+                "curl -s -A '() { :; }; echo SHELLSHOCK_PROBE' http://127.0.0.1/cgi-bin/status.sh",
+            },
+          ],
+          narration:
+            "If bash is behind CGI, the function-injection prefix can execute during the forked handler. This lab output is canned, not a live exploit against you.",
+        },
     {
-      id: "access",
-      goal: "Read the access log slice.",
-      hint: "`cat access.log`.",
-      matches: [{ kind: "exact", command: "cat access.log" }],
-      narration:
-        "Two probing IPs; one clean curl. The malicious lines show classic function-injection grammar in the User-Agent field.",
-    },
+          id: "cve",
+          goal: "Read the CVE note.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input CVE-2014-6271.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input CVE-2014-6271.txt" }],
+          narration:
+            "Environment variables are not data, they are code under bash. CGI maps remote HTTP fields into that environment.",
+        },
     {
-      id: "grep-paren",
-      goal: "Search for the shellshock prefix in the User-Agent column.",
-      hint: "`grep -nF '() {' access.log` — fixed-string grep is what you want for IOC substrings with metacharacters.",
-      matches: [{ kind: "exact", command: "grep -nF '() {' access.log" }],
-      narration:
-        "Every `() {` hit is a shellshock probe. Rotate keys if any CGI ran as a user with privileges; assume lateral movement if the same source hit multiple vhosts.",
-    },
+          id: "access",
+          goal: "Read the access log slice.",
+          hint: "`tshark -r evidence.pcap --follow-log access.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log access.log" }],
+          narration:
+            "Two probing IPs; one clean curl. The malicious lines show classic function-injection grammar in the User-Agent field.",
+        },
+    {
+          id: "grep-paren",
+          goal: "Search for the shellshock prefix in the User-Agent column.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"step\"' --follow-log access.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"step\"' --follow-log access.log" }],
+          narration:
+            "Every `() {` hit is a shellshock probe. Rotate keys if any CGI ran as a user with privileges; assume lateral movement if the same source hit multiple vhosts.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/shellshock_env_probe.sh`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/shellshock_env_probe.sh" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

@@ -166,7 +166,17 @@ export function PlaySession({ scenario }: { scenario: Scenario }) {
               ) : currentStep ? (
                 <>
                   <PanelLabel>Current step</PanelLabel>
-                  <p className="mt-2 text-[14px] leading-relaxed text-text-1">
+                  {currentStep.phase ? (
+                    <p className="mt-2 text-[11px] font-medium uppercase tracking-[0.12em] text-text-3">
+                      {currentStep.phase}
+                    </p>
+                  ) : null}
+                  <p
+                    className={cn(
+                      "text-[14px] leading-relaxed text-text-1",
+                      currentStep.phase ? "mt-1.5" : "mt-2",
+                    )}
+                  >
                     {currentStep.goal}
                   </p>
                   <HintDisclosure

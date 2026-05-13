@@ -23,7 +23,17 @@ export const solarwindsSunburst: Scenario = {
   env: { USER: "analyst", SHELL: "/bin/sh", PWD: "/soc/vendor-review" },
   ps: ["  PID TTY TIME CMD", "  1 ?   0:01 systemd", "  220 tty1 0:00 sh"],
   history: ["ls"],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input SUNBURST-BRIEF.txt": "simulated safe tool replay for solarwinds-sunburst; replaces: cat SUNBURST-BRIEF.txt\n",
+    "python3 ir_toolkit.py extract-ioc --ioc dormancy --input SUNBURST-BRIEF.txt": "simulated safe tool replay for solarwinds-sunburst; replaces: grep -nF dormancy SUNBURST-BRIEF.txt\n",
+    "python3 ir_toolkit.py extract-ioc --ioc saml --input SUNBURST-BRIEF.txt": "simulated safe tool replay for solarwinds-sunburst; replaces: grep -nF SAML SUNBURST-BRIEF.txt\n",
+    "openssl dgst -sha256 orion-stub.dll":
+      "SHA256(orion-stub.dll)= e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\n(simulated: tabletop digest, not a real Orion binary)\n",
+  },
   files: {
+    "/soc/vendor-review/orion-stub.dll": {
+      content: "MZ\x90\x00SOLAR_ORION_STUB_FOR_TABLETOP\n",
+    },
     "/soc/vendor-review/SUNBURST-BRIEF.txt": {
       content: [
         "SUNBURST / Solarigate, executive summary (reconstructed Dec 2020)",
@@ -47,32 +57,60 @@ export const solarwindsSunburst: Scenario = {
         "  assume downstream SAML trust may be forged",
       ].join("\n"),
     },
+    "/soc/vendor-review/public-poc/sunburst_orion_businesslayer_hook_note.txt": {
+      content: [
+        "// Public reporting: implant lived in SolarWinds.Orion.Core.BusinessLayer.dll",
+        "// Legit Orion process loads DLL; backdoor named jobs with benign constants.",
+        "",
+        "// Example hunt (conceptual):",
+        "// Get-FileHash .\\SolarWinds.Orion.Core.BusinessLayer.dll -Algorithm SHA256",
+        "// YARA: SUNBURST rulesets from CISA / FireEye public releases",
+        "",
+        "// No binary or C2 bytes in this museum file.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "brief",
-      goal: "Read the CIO brief.",
-      hint: "`cat SUNBURST-BRIEF.txt`.",
-      matches: [{ kind: "exact", command: "cat SUNBURST-BRIEF.txt" }],
-      narration:
-        "The supply chain was not npm typosquatting, it was a vendor who could sign Windows binaries. Dormancy and stealth DNS let the actor live inside NOC tooling.",
-    },
+          id: "digest",
+          goal: "Fingerprint the tabletop Orion stub DLL with openssl (simulated digest).",
+          hint: "`openssl dgst -sha256 orion-stub.dll`.",
+          matches: [{ kind: "exact", command: "openssl dgst -sha256 orion-stub.dll" }],
+          narration:
+            "The supply chain was not npm typosquatting, it was a vendor who could sign Windows binaries. Dormancy and stealth DNS let the actor live inside NOC tooling.",
+        },
     {
-      id: "grep-dorm",
-      goal: "Search the brief for the dormancy note.",
-      hint: "`grep -nF dormancy SUNBURST-BRIEF.txt`.",
-      matches: [{ kind: "exact", command: "grep -nF dormancy SUNBURST-BRIEF.txt" }],
-      narration:
-        "Two-week quiet period, designed to outlive snapshot restores and impatient SOC hunts.",
-    },
+          id: "brief",
+          goal: "Read the CIO brief.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input SUNBURST-BRIEF.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input SUNBURST-BRIEF.txt" }],
+          narration:
+            "Signed DLL inside a trusted update channel is the nightmare case for binary inventory.",
+        },
     {
-      id: "grep-saml",
-      goal: "Confirm SAML was in play for some victims.",
-      hint: "`grep -nF SAML SUNBURST-BRIEF.txt`.",
-      matches: [{ kind: "exact", command: "grep -nF SAML SUNBURST-BRIEF.txt" }],
-      narration:
-        "Once the NOC is owned, identity infrastructure is the next domino. SUNBURST is as much an IAM incident as an RMM incident.",
-    },
+          id: "grep-dorm",
+          goal: "Search the brief for the dormancy note.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc dormancy --input SUNBURST-BRIEF.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc dormancy --input SUNBURST-BRIEF.txt" }],
+          narration:
+            "Two-week quiet period, designed to outlive snapshot restores and impatient SOC hunts.",
+        },
+    {
+          id: "grep-saml",
+          goal: "Confirm SAML was in play for some victims.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc saml --input SUNBURST-BRIEF.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc saml --input SUNBURST-BRIEF.txt" }],
+          narration:
+            "Once the NOC is owned, identity infrastructure is the next domino. SUNBURST is as much an IAM incident as an RMM incident.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/sunburst_orion_businesslayer_hook_note.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/sunburst_orion_businesslayer_hook_note.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

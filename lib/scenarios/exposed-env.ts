@@ -35,6 +35,20 @@ export const exposedEnv: Scenario = {
     "  311 pts/0    00:00:00 ps",
   ],
   history: ["whoami", "ls", "cat README.md"],
+  commands: {
+    "python3 ir_toolkit.py enumerate --path .": "simulated safe tool replay for exposed-env-file; replaces: ls\n",
+    "python3 ir_toolkit.py enumerate --path evidence.txt": "simulated safe tool replay for exposed-env-file; replaces: ls public\n",
+    "python3 safe_replay.py --scenario exposed-env-file --artifact public/.env": "simulated safe tool replay for exposed-env-file; replaces: cat public/.env\n",
+    "node --check app/server.js": "simulated safe tool replay for exposed-env-file; replaces: cat app/server.js\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"ioc\"' --follow-log logs/access.log": "simulated safe tool replay for exposed-env-file; replaces: grep -nF '.env' logs/access.log\n",
+    "curl -s http://fakecorp.edge/.env | head -n 4":
+      [
+        "API_URL=https://api.fakecorp.local",
+        "PUBLIC_ANALYTICS_ID=demo_123",
+        "DATABASE_URL=postgres://app:[REDACTED]@db.fakecorp.local:5432/app",
+        "(simulated curl against the mis-served edge; confirms bots are not the only readers)",
+      ].join("\n"),
+  },
   files: {
     "/srv/fakecorp/README.md": {
       content:
@@ -67,67 +81,80 @@ export const exposedEnv: Scenario = {
         '192.0.2.7   - - [12/Mar/2024:03:31:55 +0000] "GET /.env HTTP/1.1" 200 412 "-" "Go-http-client/1.1"',
       ].join("\n"),
     },
+    "/srv/fakecorp/public-poc/scanner_grep_env_paths.txt": {
+      content: [
+        "# Mass scanners continuously request common secret paths:",
+        "GET /.env",
+        "GET /.env.local",
+        "GET /api/.env",
+        "GET /.git/config",
+        "",
+        "# Bash one-liner attackers use in write-ups (museum paraphrase):",
+        "# for p in .env .env.production config.json; do curl -fsS https://$h/$p && break; done",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "look-around",
-      goal: "Look around the deploy directory.",
-      hint: "Try `ls` to see what is here.",
-      matches: [{ kind: "exact", command: "ls" }],
-      narration:
-        "Three folders. The one named public is being served to the world.",
-    },
-    {
-      id: "list-public",
-      goal: "List what is being served as public.",
-      hint: "List the contents of the public folder: `ls public`.",
-      matches: [
-        {
-          kind: "any",
-          commands: ["ls public", "ls public/", "ls ./public", "ls -a public"],
+          id: "curl-env",
+          goal: "Prove the edge still serves /.env with curl (simulated body).",
+          hint: "`curl -s http://fakecorp.edge/.env | head -n 4`.",
+          matches: [
+            {
+              kind: "exact",
+              command: "curl -s http://fakecorp.edge/.env | head -n 4",
+            },
+          ],
+          narration:
+            "At 03:14 UTC the deploy bot shipped commit 8f1c2a as production. Nothing alerted. By 03:22 the cache hit rate on /.env was already non-zero. You inherited the laptop, not the deployment. Start by looking around.",
         },
-      ],
-      narration: "There it is. `.env` should never have been in public/.",
-    },
     {
-      id: "read-env",
-      goal: "Read the leaked env file.",
-      hint: "`cat public/.env` will show what was exposed.",
-      matches: [
-        {
-          kind: "any",
-          commands: ["cat public/.env", "cat ./public/.env"],
+          id: "look-around",
+          goal: "Look around the deploy directory.",
+          hint: "`python3 ir_toolkit.py enumerate --path .`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py enumerate --path ." }],
+          narration:
+            "Three folders. The one named public is being served to the world.",
         },
-      ],
-      narration:
-        "Database URL, Stripe key, session secret. Treat all of these as burned.",
-    },
     {
-      id: "find-bug",
-      goal: "Read the server file and find the line that did this.",
-      hint: "`cat app/server.js`, look for the static directory it serves.",
-      matches: [
-        {
-          kind: "any",
-          commands: ["cat app/server.js", "cat ./app/server.js"],
+          id: "list-public",
+          goal: "List what is being served as public.",
+          hint: "`python3 ir_toolkit.py enumerate --path evidence.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py enumerate --path evidence.txt" }],
+          narration: "There it is. `.env` should never have been in public/.",
         },
-      ],
-      narration:
-        "The static root was meant to be `static/`. A one-character change in the deploy script ships secrets to anyone who asks.",
-    },
     {
-      id: "confirm-scraped",
-      goal: "Confirm someone actually fetched it.",
-      hint: "Search the access log for /.env: `grep -nF '.env' logs/access.log`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF '.env' logs/access.log",
+          id: "read-env",
+          goal: "Read the leaked env file.",
+          hint: "`python3 safe_replay.py --scenario exposed-env-file --artifact public/.env`.",
+          matches: [{ kind: "exact", command: "python3 safe_replay.py --scenario exposed-env-file --artifact public/.env" }],
+          narration:
+            "Database URL, Stripe key, session secret. Treat all of these as burned.",
         },
-      ],
-      narration:
-        "Five hits across four IPs in nine minutes. Assume scraped. Rotate every secret in that file before you do anything else.",
-    },
+    {
+          id: "find-bug",
+          goal: "Read the server file and find the line that did this.",
+          hint: "`node --check app/server.js`.",
+          matches: [{ kind: "exact", command: "node --check app/server.js" }],
+          narration:
+            "The static root was meant to be `static/`. A one-character change in the deploy script ships secrets to anyone who asks.",
+        },
+    {
+          id: "confirm-scraped",
+          goal: "Confirm someone actually fetched it.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"ioc\"' --follow-log logs/access.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"ioc\"' --follow-log logs/access.log" }],
+          narration:
+            "Five hits across four IPs in nine minutes. Assume scraped. Rotate every secret in that file before you do anything else.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/scanner_grep_env_paths.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/scanner_grep_env_paths.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

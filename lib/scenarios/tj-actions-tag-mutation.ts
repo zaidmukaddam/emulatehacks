@@ -31,6 +31,16 @@ export const tjActionsTagMutation: Scenario = {
     "  102 ?        00:00:00 ps",
   ],
   history: ["pwd", "ls"],
+  commands: {
+    "python3 advisory_triage.py --input ADVISORY.md": "simulated safe tool replay for tj-actions-tag-drift; replaces: cat ADVISORY.md\n",
+    "python3 ir_toolkit.py extract-ioc --ioc tj-actions --input evidence.txt": "simulated safe tool replay for tj-actions-tag-drift; replaces: grep -nF tj-actions workflows/*.yml\n",
+    "gh workflow view workflows/lint.yml --yaml": "simulated safe tool replay for tj-actions-tag-drift; replaces: cat workflows/lint.yml\n",
+    "python3 ir_toolkit.py extract-ioc --ioc lint --input evidence.txt": "simulated safe tool replay for tj-actions-tag-drift; replaces: grep -nF lint runs/*.log\n",
+    "tshark -r evidence.pcap --follow-log runs/build-2237.log": "simulated safe tool replay for tj-actions-tag-drift; replaces: cat runs/build-2237.log\n",
+    "tshark -r evidence.pcap --follow-log runs/build-2241.log": "simulated safe tool replay for tj-actions-tag-drift; replaces: cat runs/build-2241.log\n",
+    "curl -s https://api.github.com/repos/tj-actions/changed-files/git/refs/tags/v44":
+      '{"ref":"refs/tags/v44","node_id":"stub","url":"https://api.github.com/repos/tj-actions/changed-files/git/refs/tags/v44","object":{"sha":"0e58ed867288cfb8930e7c9b45b1c2a3d4e5f6a7","type":"commit"}}\n(simulated: tag moved post-compromise in public write-ups)\n',
+  },
   files: {
     "/var/log/forge-ci/ADVISORY.md": {
       content: [
@@ -129,74 +139,93 @@ export const tjActionsTagMutation: Scenario = {
         "Job succeeded.",
       ].join("\n"),
     },
+    "/var/log/forge-ci/public-poc/gha_commit_pin_vs_tag.yml": {
+      content: [
+        "# Pin third-party Actions by immutable commit SHA, not movable tags.",
+        "",
+        "# Vulnerable:",
+        "#   uses: tj-actions/changed-files@v44",
+        "",
+        "# Safer:",
+        "#   uses: tj-actions/changed-files@40dca42ed8a0d02a35f1e0d8e3a8f1a8d8b9c0a1",
+        "",
+        "# CVE-2025-30066 class: attacker retargeted every v* tag → one malicious commit.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "advisory",
-      goal: "Read the advisory note for context.",
-      hint: "`cat ADVISORY.md`.",
-      matches: [{ kind: "exact", command: "cat ADVISORY.md" }],
-      narration:
-        "Two questions, in order: which workflows reference the action by tag, and which of them ran during the window.",
-    },
-    {
-      id: "find-uses",
-      goal: "Search every workflow file for `tj-actions/changed-files`.",
-      hint:
-        "Recursive grep would be ideal in real life (`grep -r`). Here, try `grep -nF tj-actions workflows/*.yml`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF tj-actions workflows/*.yml",
+          id: "curl-tag",
+          goal: "Resolve the floating v44 tag via the GitHub refs API (simulated JSON).",
+          hint: "`curl -s https://api.github.com/repos/tj-actions/changed-files/git/refs/tags/v44`.",
+          matches: [
+            {
+              kind: "exact",
+              command:
+                "curl -s https://api.github.com/repos/tj-actions/changed-files/git/refs/tags/v44",
+            },
+          ],
+          narration:
+            "Two questions, in order: which workflows reference the action by tag, and which of them ran during the window.",
         },
-      ],
-      narration:
-        "Two workflows reference the action. release.yml pins by a 40-char commit SHA. lint.yml pins by `@v44`. lint.yml is the one that's exposed.",
-    },
     {
-      id: "open-lint",
-      goal: "Open the exposed workflow file in full.",
-      hint: "`cat workflows/lint.yml`.",
-      matches: [{ kind: "exact", command: "cat workflows/lint.yml" }],
-      narration:
-        "Confirmed: `tj-actions/changed-files@v44`. Every PR run from that workflow during the window pulled the malicious commit.",
-    },
-    {
-      id: "search-window",
-      goal:
-        "Find every run of the lint workflow during the compromise window. Try `grep -nF lint runs/*.log`.",
-      hint:
-        "`grep -nF lint runs/*.log` surfaces every line containing the workflow name.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF lint runs/*.log",
+          id: "advisory",
+          goal: "Read the advisory note for context.",
+          hint: "`python3 advisory_triage.py --input ADVISORY.md`.",
+          matches: [{ kind: "exact", command: "python3 advisory_triage.py --input ADVISORY.md" }],
+          narration:
+            "Advisory text explains tag mutation, memory dump payload, and why commit SHAs are the fix.",
         },
-      ],
-      narration:
-        "Two lint runs surface, build-2233 (March 13, before the compromise) and build-2237 (March 14, during it).",
-    },
     {
-      id: "open-bad",
-      goal: "Open the suspect run.",
-      hint: "`cat runs/build-2237.log`.",
-      matches: [
-        { kind: "exact", command: "cat runs/build-2237.log" },
-      ],
-      narration:
-        "Different commit SHA. Different output: the action printed a base64 blob into the log labelled CRED_DUMP_MARKER. That's the canary StepSecurity called out, double-base64 of the runner's secret memory. Treat any GitHub-issued token, npm token, AWS keys, or signing keys reachable from this workflow as compromised. Rotate. Then open every public log in the repo's Actions tab from this run forward and scrub.",
-    },
+          id: "find-uses",
+          goal: "Search every workflow file for `tj-actions/changed-files`.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc tj-actions --input evidence.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc tj-actions --input evidence.txt" }],
+          narration:
+            "Two workflows reference the action. release.yml pins by a 40-char commit SHA. lint.yml pins by `@v44`. lint.yml is the one that's exposed.",
+        },
     {
-      id: "compare-good",
-      goal:
-        "Confirm the safe pattern by reading the release workflow's run from the day after.",
-      hint: "`cat runs/build-2241.log`.",
-      matches: [
-        { kind: "exact", command: "cat runs/build-2241.log" },
-      ],
-      narration:
-        "release.yml pinned by full commit SHA, so the resolution step is a tautology, same SHA in, same SHA out, and the malicious commit never reaches the runner. This is the structural fix.",
-    },
+          id: "open-lint",
+          goal: "Open the exposed workflow file in full.",
+          hint: "`gh workflow view workflows/lint.yml --yaml`.",
+          matches: [{ kind: "exact", command: "gh workflow view workflows/lint.yml --yaml" }],
+          narration:
+            "Confirmed: `tj-actions/changed-files@v44`. Every PR run from that workflow during the window pulled the malicious commit.",
+        },
+    {
+          id: "search-window",
+          goal:
+            "Find every run of the lint workflow during the compromise window. Try `grep -nF lint runs/*.log`.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc lint --input evidence.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc lint --input evidence.txt" }],
+          narration:
+            "Two lint runs surface, build-2233 (March 13, before the compromise) and build-2237 (March 14, during it).",
+        },
+    {
+          id: "open-bad",
+          goal: "Open the suspect run.",
+          hint: "`tshark -r evidence.pcap --follow-log runs/build-2237.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log runs/build-2237.log" }],
+          narration:
+            "Different commit SHA. Different output: the action printed a base64 blob into the log labelled CRED_DUMP_MARKER. That's the canary StepSecurity called out, double-base64 of the runner's secret memory. Treat any GitHub-issued token, npm token, AWS keys, or signing keys reachable from this workflow as compromised. Rotate. Then open every public log in the repo's Actions tab from this run forward and scrub.",
+        },
+    {
+          id: "compare-good",
+          goal:
+            "Confirm the safe pattern by reading the release workflow's run from the day after.",
+          hint: "`tshark -r evidence.pcap --follow-log runs/build-2241.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log runs/build-2241.log" }],
+          narration:
+            "release.yml pinned by full commit SHA, so the resolution step is a tautology, same SHA in, same SHA out, and the malicious commit never reaches the runner. This is the structural fix.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/gha_commit_pin_vs_tag.yml`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/gha_commit_pin_vs_tag.yml" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

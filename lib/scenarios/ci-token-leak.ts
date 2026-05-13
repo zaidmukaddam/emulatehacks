@@ -27,6 +27,13 @@ export const ciTokenLeak: Scenario = {
     "  101 ?        00:00:00 ps",
   ],
   history: ["ls"],
+  commands: {
+    "python3 ir_toolkit.py enumerate --path evidence.txt": "simulated safe tool replay for ci-token-leak; replaces: ls runs\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"authtoken\"' --follow-log runs/build-1146.log": "simulated safe tool replay for ci-token-leak; replaces: grep -nF authToken runs/build-1146.log\n",
+    "gh workflow view config/release.yml --yaml": "simulated safe tool replay for ci-token-leak; replaces: cat config/release.yml\n",
+    "npm ping":
+      '{"pong":true}\n(simulated: registry reachability check before you hunt the leaked token line)\n',
+  },
   files: {
     "/builds/forge/runs/build-1144.log": {
       content:
@@ -65,36 +72,59 @@ export const ciTokenLeak: Scenario = {
         "          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}",
       ].join("\n"),
     },
+    "/builds/forge/public-poc/ci_secret_echo_antipatterns.sh": {
+      content: [
+        "#!/bin/sh",
+        "# Anti-pattern: set -x + echo secret into log (public OSS Actions).",
+        "",
+        "# BAD: prints expanded token to stdout",
+        "# set -x",
+        "# echo \"//registry.npmjs.org/:_authToken=$NPM_TOKEN\" >> ~/.npmrc",
+        "",
+        "# BETTER: use env without xtrace; rely on NPM_CONFIG_* or actions/setup-node npm auth",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "list-runs",
-      goal: "List the recent CI runs.",
-      hint: "`ls runs`.",
-      matches: [{ kind: "any", commands: ["ls runs", "ls runs/"] }],
-      narration: "Three runs. The latest is the publish job.",
-    },
-    {
-      id: "search-token",
-      goal: "Search the latest run for anything that looks like a token.",
-      hint: "`grep -nF authToken runs/build-1146.log`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF authToken runs/build-1146.log",
+          id: "npm-ping",
+          goal: "Confirm npm registry reachability from the CI archive host (simulated).",
+          hint: "`npm ping`.",
+          matches: [{ kind: "exact", command: "npm ping" }],
+          narration:
+            "GitHub flagged a token as 'observed in a public location'. The token belongs to the forge org. Build logs for the forge/api repository are public for open-source contributors. Walk the most recent runs.",
         },
-      ],
-      narration:
-        "There it is, the token printed in plain text because the script ran with `set -x`.",
-    },
     {
-      id: "open-pipeline",
-      goal: "Open the pipeline definition.",
-      hint: "`cat config/release.yml`.",
-      matches: [{ kind: "exact", command: "cat config/release.yml" }],
-      narration:
-        "Someone added `set -x` to debug the auth step and never removed it. Every run since then has echoed the token to a public log.",
-    },
+          id: "list-runs",
+          goal: "List the recent CI runs.",
+          hint: "`python3 ir_toolkit.py enumerate --path evidence.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py enumerate --path evidence.txt" }],
+          narration: "Three runs. The latest is the publish job.",
+        },
+    {
+          id: "search-token",
+          goal: "Search the latest run for anything that looks like a token.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"authtoken\"' --follow-log runs/build-1146.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"authtoken\"' --follow-log runs/build-1146.log" }],
+          narration:
+            "There it is, the token printed in plain text because the script ran with `set -x`.",
+        },
+    {
+          id: "open-pipeline",
+          goal: "Open the pipeline definition.",
+          hint: "`gh workflow view config/release.yml --yaml`.",
+          matches: [{ kind: "exact", command: "gh workflow view config/release.yml --yaml" }],
+          narration:
+            "Someone added `set -x` to debug the auth step and never removed it. Every run since then has echoed the token to a public log.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/ci_secret_echo_antipatterns.sh`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/ci_secret_echo_antipatterns.sh" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

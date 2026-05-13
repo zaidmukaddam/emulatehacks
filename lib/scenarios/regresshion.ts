@@ -33,6 +33,18 @@ export const regresshion: Scenario = {
     "  402 pts/0    00:00:00 ps",
   ],
   history: ["uname -a"],
+  commands: {
+    "python3 advisory_triage.py --input ADVISORY.md": "simulated safe tool replay for regresshion-openssh; replaces: cat ADVISORY.md\n",
+    "python3 safe_replay.py --scenario regresshion-openssh --artifact /usr/sbin/sshd.version": "simulated safe tool replay for regresshion-openssh; replaces: cat /usr/sbin/sshd.version\n",
+    "sshd -T -f /etc/ssh/sshd_config": "simulated safe tool replay for regresshion-openssh; replaces: cat /etc/ssh/sshd_config\n",
+    "sshd -T -f /etc/ssh/sshd_config.d/90-regresshion.conf": "simulated safe tool replay for regresshion-openssh; replaces: cat /etc/ssh/sshd_config.d/90-regresshion.conf\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"timeout-before-authentication\"' --follow-log /var/log/auth.log": "simulated safe tool replay for regresshion-openssh; replaces: grep -nF 'Timeout before authentication' /var/log/auth.log\n",
+    "nmap -sV -p22 127.0.0.1":
+      [
+        "PORT   STATE SERVICE VERSION",
+        "22/tcp open  ssh     OpenSSH 9.6p1 Ubuntu (tabletop; in affected regreSSHion range)",
+      ].join("\n"),
+  },
   files: {
     "/home/responder/ADVISORY.md": {
       content: [
@@ -98,61 +110,86 @@ export const regresshion: Scenario = {
     "/usr/sbin/sshd.version": {
       content: "OpenSSH_9.6p1 Ubuntu-3ubuntu13, OpenSSL 3.0.13 30 Jan 2024\n",
     },
+    // Qualys TRU description: unsafe work from SIGALRM handler vs normal execution (CVE-2024-6387).
+    "/home/responder/public-poc/regresshion_race_note.c": {
+      content: [
+        "/*",
+        " * Conceptual race (July 2024 disclosure): sshd arms SIGALRM for LoginGraceTime.",
+        " * If the handler runs while the main thread is inside heap routines that are not",
+        " * async-signal-safe, glibc metadata can be corrupted into an exploitable state.",
+        " * Patches restore async-signal-safe behaviour; LoginGraceTime 0 removes the alarm.",
+        " */",
+        "",
+        "#include <signal.h>",
+        "#include <stdlib.h>",
+        "",
+        "static void alarm_handler(int sig) {",
+        "    /* simplified anti-pattern: real bug involved syslog/malloc in handler */",
+        "    (void)sig;",
+        "}",
+        "",
+        "/* See OpenSSH 9.8p1 release notes and Qualys advisory for full detail. */",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "advisory",
-      goal: "Read the advisory note for context.",
-      hint: "`cat ADVISORY.md`.",
-      matches: [{ kind: "exact", command: "cat ADVISORY.md" }],
-      narration:
-        "Affected: 8.5p1 → 9.7p1 on glibc-based Linux. Same-day mitigation: LoginGraceTime 0. That disables the SIGALRM the race depends on, at the cost of letting half-open connections accumulate.",
-    },
-    {
-      id: "version",
-      goal: "Identify the sshd version on this box.",
-      hint: "`cat /usr/sbin/sshd.version`.",
-      matches: [{ kind: "exact", command: "cat /usr/sbin/sshd.version" }],
-      narration:
-        "OpenSSH 9.6p1 on Ubuntu. Squarely inside the affected range.",
-    },
-    {
-      id: "config",
-      goal: "Read the current sshd config.",
-      hint: "`cat /etc/ssh/sshd_config`.",
-      matches: [{ kind: "exact", command: "cat /etc/ssh/sshd_config" }],
-      narration:
-        "Default config, LoginGraceTime is unset, so it inherits the 120-second default. That gives a remote attacker the full window per attempt.",
-    },
-    {
-      id: "mitigation",
-      goal:
-        "Confirm the same-day mitigation has been staged in /etc/ssh/sshd_config.d/.",
-      hint: "`cat /etc/ssh/sshd_config.d/90-regresshion.conf`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "cat /etc/ssh/sshd_config.d/90-regresshion.conf",
+          id: "nmap-ssh",
+          goal: "Fingerprint local sshd with nmap service detection (simulated).",
+          hint: "`nmap -sV -p22 127.0.0.1`.",
+          matches: [{ kind: "exact", command: "nmap -sV -p22 127.0.0.1" }],
+          narration:
+            "Same-day fingerprint: confirm sshd banner and version before you trust config-only mitigations.",
         },
-      ],
-      narration:
-        "LoginGraceTime 0. Reload sshd and the race is closed on this host. Schedule the package upgrade through change control; you have weeks for the patch, you have minutes for the mitigation.",
-    },
     {
-      id: "logs",
-      goal: "Check auth.log for anything that looks like an exploit attempt.",
-      hint:
-        "Look for many short-lived `Timeout before authentication` lines from one IP. Try `grep -nF 'Timeout before authentication' /var/log/auth.log`.",
-      matches: [
-        {
-          kind: "exact",
-          command:
-            "grep -nF 'Timeout before authentication' /var/log/auth.log",
+          id: "advisory",
+          goal: "Read the advisory note for context.",
+          hint: "`python3 advisory_triage.py --input ADVISORY.md`.",
+          matches: [{ kind: "exact", command: "python3 advisory_triage.py --input ADVISORY.md" }],
+          narration:
+            "Affected: 8.5p1 → 9.7p1 on glibc-based Linux. Same-day mitigation: LoginGraceTime 0. That disables the SIGALRM the race depends on, at the cost of letting half-open connections accumulate.",
         },
-      ],
-      narration:
-        "Three connections from 198.51.100.42 in six seconds, each ending at the LoginGraceTime cutoff. Could be a scanner, could be the start of the race. Either way: blocklist the IP, ship the LoginGraceTime mitigation cluster-wide, and log the rotation of any host key that is older than today.",
-    },
+    {
+          id: "version",
+          goal: "Identify the sshd version on this box.",
+          hint: "`python3 safe_replay.py --scenario regresshion-openssh --artifact /usr/sbin/sshd.version`.",
+          matches: [{ kind: "exact", command: "python3 safe_replay.py --scenario regresshion-openssh --artifact /usr/sbin/sshd.version" }],
+          narration:
+            "OpenSSH 9.6p1 on Ubuntu. Squarely inside the affected range.",
+        },
+    {
+          id: "config",
+          goal: "Read the current sshd config.",
+          hint: "`sshd -T -f /etc/ssh/sshd_config`.",
+          matches: [{ kind: "exact", command: "sshd -T -f /etc/ssh/sshd_config" }],
+          narration:
+            "Default config, LoginGraceTime is unset, so it inherits the 120-second default. That gives a remote attacker the full window per attempt.",
+        },
+    {
+          id: "mitigation",
+          goal:
+            "Confirm the same-day mitigation has been staged in /etc/ssh/sshd_config.d/.",
+          hint: "`sshd -T -f /etc/ssh/sshd_config.d/90-regresshion.conf`.",
+          matches: [{ kind: "exact", command: "sshd -T -f /etc/ssh/sshd_config.d/90-regresshion.conf" }],
+          narration:
+            "LoginGraceTime 0. Reload sshd and the race is closed on this host. Schedule the package upgrade through change control; you have weeks for the patch, you have minutes for the mitigation.",
+        },
+    {
+          id: "logs",
+          goal: "Check auth.log for anything that looks like an exploit attempt.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"timeout-before-authentication\"' --follow-log /var/log/auth.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"timeout-before-authentication\"' --follow-log /var/log/auth.log" }],
+          narration:
+            "Three connections from 198.51.100.42 in six seconds, each ending at the LoginGraceTime cutoff. Could be a scanner, could be the start of the race. Either way: blocklist the IP, ship the LoginGraceTime mitigation cluster-wide, and log the rotation of any host key that is older than today.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/regresshion_race_note.c`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/regresshion_race_note.c" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

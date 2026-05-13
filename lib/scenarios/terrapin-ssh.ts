@@ -24,6 +24,13 @@ export const terrapinSsh: Scenario = {
   env: { USER: "crypto", SHELL: "/bin/sh", PWD: "/ssh/terrapin-workbench" },
   ps: ["  PID TTY TIME CMD", "  1 ?   0:00 sshd"],
   history: [],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input CVE-2023-48795-brief.txt": "simulated safe tool replay for terrapin-ssh-handshake; replaces: cat CVE-2023-48795-brief.txt\n",
+    "python3 ir_toolkit.py parse-artifact --input evidence.txt": "simulated safe tool replay for terrapin-ssh-handshake; replaces: cat sshd_config\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"newkeys\"' --follow-log auth.log": "simulated safe tool replay for terrapin-ssh-handshake; replaces: grep -nF NEWKEYS auth.log\n",
+    "ssh -V 2>&1":
+      "OpenSSH_8.9p1 Debian-1 (tabletop)\n(simulated: compare client/server builds before Terrapin patch window)\n",
+  },
   files: {
     "/ssh/terrapin-workbench/CVE-2023-48795-brief.txt": {
       content: [
@@ -51,32 +58,60 @@ export const terrapinSsh: Scenario = {
         "2023-12-21T08:19:40Z bastion-lab sshd[1214]: error: Protocol error: packet too long",
       ].join("\n"),
     },
+    "/ssh/terrapin-workbench/public-poc/terrapin_handshake_truncation_note.txt": {
+      content: [
+        "# CVE-2023-48795: MitM truncates handshake so client/server disagree on CHANNEL_REQUEST / extensions.",
+        "# Attacker suppresses SSH_MSG_NEWKEYS or related sequencing in vulnerable KEX stacks.",
+        "",
+        "# Mitigation highlights from public paper:",
+        "# - strict key exchange (strict-kex) extension",
+        "# - patch both peers; disable weak EtM + ChaCha combos where advised",
+        "",
+        "# Requires on-path attacker; coffee-shop WiFi risk model.",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "brief",
-      goal: "Read the Terrapin brief.",
-      hint: "`cat CVE-2023-48795-brief.txt`.",
-      matches: [{ kind: "exact", command: "cat CVE-2023-48795-brief.txt" }],
-      narration:
-        "Another reason VPN-over-coffee-shop is insufficient, attackers need positioning, not CPU farms.",
-    },
+          id: "ssh-version",
+          goal: "Print the OpenSSH client version string (simulated).",
+          hint: "`ssh -V 2>&1`.",
+          matches: [{ kind: "exact", command: "ssh -V 2>&1" }],
+          narration:
+            "Another reason VPN-over-coffee-shop is insufficient, attackers need positioning, not CPU farms.",
+        },
     {
-      id: "config",
-      goal: "Inspect the synthetic sshd_config.",
-      hint: "`cat sshd_config`.",
-      matches: [{ kind: "exact", command: "cat sshd_config" }],
-      narration:
-        "ChaCha20-Poly1305 still listed, pairing with peer matters; patch awareness beats cipher dogma.",
-    },
+          id: "brief",
+          goal: "Read the Terrapin brief.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input CVE-2023-48795-brief.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input CVE-2023-48795-brief.txt" }],
+          narration:
+            "Handshake prefix truncation breaks early NEWKEYS expectations; MitM positioning turns it into a downgrade story.",
+        },
     {
-      id: "grep",
-      goal: "Find lines mentioning NEWKEYS.",
-      hint: "`grep -nF NEWKEYS auth.log`.",
-      matches: [{ kind: "exact", command: "grep -nF NEWKEYS auth.log" }],
-      narration:
-        "Telemetry for handshake truncation barely existed pre-2024, expect false negatives in old logs.",
-    },
+          id: "config",
+          goal: "Inspect the synthetic sshd_config.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input evidence.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input evidence.txt" }],
+          narration:
+            "ChaCha20-Poly1305 still listed, pairing with peer matters; patch awareness beats cipher dogma.",
+        },
+    {
+          id: "grep",
+          goal: "Find lines mentioning NEWKEYS.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"newkeys\"' --follow-log auth.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"newkeys\"' --follow-log auth.log" }],
+          narration:
+            "Telemetry for handshake truncation barely existed pre-2024, expect false negatives in old logs.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/terrapin_handshake_truncation_note.txt`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/terrapin_handshake_truncation_note.txt" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

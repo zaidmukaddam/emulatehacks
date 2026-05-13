@@ -1,4 +1,4 @@
-import type { Scenario, Step, StepMatch, VFiles } from "../types";
+import type { Scenario, SimulatedCommands, Step, StepMatch, VFiles } from "../types";
 import { ANSI, c } from "./ansi";
 import { getFile, isDirectory, listDir, normalizePath, walk } from "./fs";
 
@@ -11,7 +11,447 @@ export type RuntimeEvents = {
 
 const NL = "\r\n";
 
-/** Commands the museum shell implements — used for tab completion. */
+/** Normalize a typed command line for simulated tool lookup. */
+export function normalizeShellLine(raw: string): string {
+  return raw.replace(/\s+/g, " ").trim();
+}
+
+function buildSimulatedLookup(commands: SimulatedCommands | undefined): Map<string, string> {
+  const map = new Map<string, string>();
+  if (!commands) return map;
+  for (const [key, value] of Object.entries(commands)) {
+    const norm = normalizeShellLine(key);
+    const text = Array.isArray(value) ? value.join("\n") : value;
+    map.set(norm, text.endsWith("\n") ? text : text + "\n");
+  }
+  return map;
+}
+
+/** First token of each simulated command key, for tab completion. */
+function simulatedCommandVerbs(commands: SimulatedCommands | undefined): string[] {
+  if (!commands) return [];
+  const verbs = new Set<string>();
+  for (const key of Object.keys(commands)) {
+    const first = normalizeShellLine(key).split(/\s+/)[0];
+    if (first) verbs.add(first);
+  }
+  return [...verbs];
+}
+
+/**
+ * Readable Python helpers for exhibits. Invocations matching `scenario.commands` are still
+ * intercepted and return canned stdout. These bodies exist so `cat` shows plausible PoC-style,
+ * defensive code (reads only; no sockets, subprocess, or eval).
+ */
+const HELPER_TOOL_SOURCE: Record<string, string> = {
+  "ir_toolkit.py": [
+    "#!/usr/bin/env python3",
+    '"""',
+    "ir_toolkit: defensive helper for staged local evidence.",
+    "",
+    "Exhibit: the museum may intercept argv and replay canned transcript lines instead.",
+    '"""',
+    "",
+    "from __future__ import annotations",
+    "",
+    "import argparse",
+    "import re",
+    "import sys",
+    "from pathlib import Path",
+    "",
+    "",
+    "def _read_text(path: Path) -> str:",
+    '    return path.read_text(encoding="utf-8", errors="replace")',
+    "",
+    "",
+    "def cmd_parse_artifact(args: argparse.Namespace) -> None:",
+    '    """Print envelope lines for a staged artifact."""',
+    "    p = Path(args.input)",
+    "    data = _read_text(p)",
+    "    lines = data.splitlines()",
+    '    print(f"[ir_toolkit] artifact: {p}")',
+    '    print(f"[ir_toolkit] lines: {len(lines)}  bytes: {len(data)}")',
+    "    for i, line in enumerate(lines[:40], 1):",
+    '        print(f"{i:4}| {line}")',
+    "    if len(lines) > 40:",
+    '        print("[ir_toolkit] ... truncated ...")',
+    "",
+    "",
+    "def cmd_extract_ioc(args: argparse.Namespace) -> None:",
+    '    """Case-insensitive substring hunt."""',
+    "    needle = args.ioc.lower()",
+    "    p = Path(args.input)",
+    "    for num, line in enumerate(_read_text(p).splitlines(), 1):",
+    "        if needle in line.lower():",
+    '            print(f"{num}:{line}")',
+    "",
+    "",
+    "def cmd_table_summary(args: argparse.Namespace) -> None:",
+    '    """TSV/CSV-lite: guess delimiter, print columns and row count."""',
+    "    p = Path(args.input)",
+    "    rows = [r for r in _read_text(p).splitlines() if r.strip()]",
+    "    if not rows:",
+    '        print("[ir_toolkit] empty table")',
+    "        return",
+    '    sep = "\\t" if "\\t" in rows[0] else ","',
+    "    headers = rows[0].split(sep)",
+    '    print(f"[ir_toolkit] columns ({len(headers)}): {headers}")',
+    '    print(f"[ir_toolkit] data rows: {len(rows) - 1}")',
+    "",
+    "",
+    "def cmd_csv_summary(args: argparse.Namespace) -> None:",
+    '    """Alias of table-summary for CSV-shaped dumps."""',
+    "    cmd_table_summary(args)",
+    "",
+    "",
+    "def cmd_enumerate(args: argparse.Namespace) -> None:",
+    '    """List immediate children (read-only)."""',
+    "    root = Path(args.path)",
+    "    if not root.is_dir():",
+    '        print(f"[ir_toolkit] not a directory: {root}", file=sys.stderr)',
+    "        sys.exit(1)",
+    "    for name in sorted(p.name for p in root.iterdir()):",
+    "        print(name)",
+    "",
+    "",
+    "def cmd_discover(args: argparse.Namespace) -> None:",
+    '    """Find files under root whose basename ends with --kind (suffix match)."""',
+    "    root = Path(args.root)",
+    "    kind = args.kind",
+    "    pat = re.compile(re.escape(kind) + '$', re.I)",
+    "    hits: list[Path] = []",
+    "    for path in root.rglob('*'):",
+    "        if path.is_file() and pat.search(path.name):",
+    "            hits.append(path)",
+    '    print(f"[ir_toolkit] discover kind={kind!r} root={root} hits={len(hits)}")',
+    "    for h in hits[:200]:",
+    "        print(h)",
+    "",
+    "",
+    "def cmd_count_events(args: argparse.Namespace) -> None:",
+    '    """Count non-empty lines in a log-ish file."""',
+    "    p = Path(args.input)",
+    "    n = sum(1 for line in _read_text(p).splitlines() if line.strip())",
+    '    print(f"[ir_toolkit] {p}: non_empty_lines={n}")',
+    "",
+    "",
+    "def main() -> None:",
+    "    ap = argparse.ArgumentParser(prog='ir_toolkit')",
+    "    sub = ap.add_subparsers(dest='cmd', required=True)",
+    "",
+    "    sp = sub.add_parser('parse-artifact')",
+    "    sp.add_argument('--input', required=True)",
+    "    sp.set_defaults(func=cmd_parse_artifact)",
+    "",
+    "    sp = sub.add_parser('extract-ioc')",
+    "    sp.add_argument('--ioc', required=True)",
+    "    sp.add_argument('--input', required=True)",
+    "    sp.set_defaults(func=cmd_extract_ioc)",
+    "",
+    "    sp = sub.add_parser('table-summary')",
+    "    sp.add_argument('--input', required=True)",
+    "    sp.set_defaults(func=cmd_table_summary)",
+    "",
+    "    sp = sub.add_parser('csv-summary')",
+    "    sp.add_argument('--input', required=True)",
+    "    sp.set_defaults(func=cmd_csv_summary)",
+    "",
+    "    sp = sub.add_parser('enumerate')",
+    "    sp.add_argument('--path', required=True)",
+    "    sp.set_defaults(func=cmd_enumerate)",
+    "",
+    "    sp = sub.add_parser('discover')",
+    "    sp.add_argument('--kind', required=True)",
+    "    sp.add_argument('--root', required=True)",
+    "    sp.set_defaults(func=cmd_discover)",
+    "",
+    "    sp = sub.add_parser('count-events')",
+    "    sp.add_argument('--input', required=True)",
+    "    sp.set_defaults(func=cmd_count_events)",
+    "",
+    "    args = ap.parse_args()",
+    "    args.func(args)",
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    main()",
+  ].join("\n"),
+
+  "safe_replay.py": [
+    "#!/usr/bin/env python3",
+    '"""',
+    "safe_replay: read staged pointers and print excerpts; no execution path for payloads.",
+    '"""',
+    "",
+    "from __future__ import annotations",
+    "",
+    "import argparse",
+    "import re",
+    "import sys",
+    "from pathlib import Path",
+    "",
+    "",
+    "def main() -> None:",
+    '    ap = argparse.ArgumentParser(prog="safe_replay")',
+    '    ap.add_argument("--scenario", required=True)',
+    '    ap.add_argument("--artifact", default=None)',
+    '    ap.add_argument("--grep", default=None, dest="grep_pat")',
+    '    ap.add_argument("--sample", action="store_true")',
+    "    args = ap.parse_args()",
+    "",
+    "    tag = args.scenario",
+    "    target = Path(args.artifact) if args.artifact else None",
+    '    print(f"[safe_replay] scenario={tag}")',
+    "    if target is None:",
+    '        print("[safe_replay] no --artifact; metadata only.")',
+    "        return",
+    "",
+    "    body = target.read_text(encoding='utf-8', errors='replace')",
+    "    lines = body.splitlines()",
+    "",
+    "    if args.sample:",
+    '        print("[safe_replay] last non-empty lines:")',
+    "        tail = [ln for ln in lines if ln.strip()][-8:]",
+    "        for ln in tail:",
+    "            print(ln)",
+    "        return",
+    "",
+    "    if args.grep_pat:",
+    '        pat = re.compile(re.escape(args.grep_pat), re.I)',
+    "        hits = [(i + 1, ln) for i, ln in enumerate(lines) if pat.search(ln)]",
+    '        print(f"[safe_replay] grep hits: {len(hits)}")',
+    "        for num, ln in hits[:120]:",
+    '            print(f"{num}:{ln}")',
+    "        return",
+    "",
+    '    print("[safe_replay] excerpt (cap 120 lines):")',
+    "    for i, ln in enumerate(lines[:120], 1):",
+    '        print(f"{i:4}| {ln}")',
+    "    if len(lines) > 120:",
+    '        print("[safe_replay] ... truncated ...")',
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    main()",
+  ].join("\n"),
+
+  "advisory_triage.py": [
+    "#!/usr/bin/env python3",
+    '"""',
+    "advisory_triage: turn long vendor or CISA text into defender checklist snippets.",
+    '"""',
+    "",
+    "from __future__ import annotations",
+    "",
+    "import argparse",
+    "import sys",
+    "from pathlib import Path",
+    "",
+    "",
+    "def bullets(path: Path, summary_only: bool) -> None:",
+    '    text = path.read_text(encoding="utf-8", errors="replace")',
+    "    lines = text.splitlines()",
+    '    title = lines[0] if lines else "(empty)"',
+    '    print(f"[advisory] file: {path}")',
+    '    print(f"[advisory] first_line: {title}")',
+    "    actionable = []",
+    "    for ln in lines:",
+    "        s = ln.strip()",
+    "        if s.startswith(('CVE-', 'RHSA-', 'MS', 'KB')):",
+    "            actionable.append(('id', s))",
+    "        if s.startswith(('- ', '* ', '1.', '2.')):",
+    "            actionable.append(('item', s[:200]))",
+    "    limit = 25 if summary_only else 80",
+    "    chunk = actionable[:limit]",
+    '    print(f"[advisory] checklist_snippets({len(chunk)})")',
+    "    for kind, snip in chunk:",
+    '        print(f"  [{kind}] {snip}")',
+    "",
+    "",
+    "def main() -> None:",
+    '    ap = argparse.ArgumentParser(prog="advisory_triage")',
+    '    ap.add_argument("--input")',
+    '    ap.add_argument("--summary", action="store_true")',
+    "    ns = ap.parse_args()",
+    "    src = Path(ns.input) if ns.input else None",
+    "    if not src:",
+    '        print("[advisory] usage: advisory_triage.py --input advisory.md [--summary]", file=sys.stderr)',
+    '        raise SystemExit(2)',
+    "    bullets(src, summary_only=ns.summary)",
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    main()",
+  ].join("\n"),
+
+  "mail_triage.py": [
+    "#!/usr/bin/env python3",
+    '"""',
+    "mail_triage: print common headers from a saved .eml-style transcript.",
+    '"""',
+    "",
+    "from __future__ import annotations",
+    "",
+    "import argparse",
+    "from pathlib import Path",
+    "",
+    "",
+    "def headers_only(path: Path) -> None:",
+    "    blob = path.read_text(encoding='utf-8', errors='replace').splitlines()",
+    '    keys = ("From:", "To:", "Subject:", "Attachment:", "Date:")',
+    "    hits = []",
+    "    for ln in blob:",
+    "        if any(ln.startswith(k) for k in keys):",
+    "            hits.append(ln.strip())",
+    '    print(f"[mail] {path}")',
+    "    for ln in hits:",
+    "        print(ln)",
+    "",
+    "",
+    "def main() -> None:",
+    '    ap = argparse.ArgumentParser(prog="mail_triage")',
+    '    ap.add_argument("--headers", required=True)',
+    "    ns = ap.parse_args()",
+    "    headers_only(Path(ns.headers))",
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    main()",
+  ].join("\n"),
+
+  "module_filter.py": [
+    "#!/usr/bin/env python3",
+    '"""',
+    "module_filter: filter lsmod-style rows with a case-insensitive substring.",
+    '"""',
+    "",
+    "from __future__ import annotations",
+    "",
+    "import argparse",
+    "import sys",
+    "from pathlib import Path",
+    "",
+    "",
+    "def main() -> None:",
+    '    ap = argparse.ArgumentParser(prog="module_filter")',
+    '    ap.add_argument("--contains", required=True)',
+    '    ap.add_argument("--source", required=True)',
+    "    ns = ap.parse_args()",
+    '    needle = ns.contains.lower()',
+    "    blob = Path(ns.source).read_text(encoding='utf-8', errors='replace').splitlines()",
+    '    matched = [ln for ln in blob if needle in ln.lower()]',
+    '    print(f"[module_filter] source={ns.source} hits={len(matched)}", file=sys.stderr)',
+    "    for ln in matched:",
+    "        print(ln)",
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    main()",
+  ].join("\n"),
+
+  "osqueryi.py": [
+    "#!/usr/bin/env python3",
+    '"""',
+    "Mini osquery shim: KEY=VALUE lines from /etc/os-release for 'select * from os_version'.",
+    '"""',
+    "",
+    "from __future__ import annotations",
+    "",
+    "import argparse",
+    "import re",
+    "from pathlib import Path",
+    "",
+    "",
+    "def parse_os_release(path: Path) -> dict[str, str]:",
+    "    out: dict[str, str] = {}",
+    '    rx = re.compile(r"^([A-Z0-9_]+)=(.*)$")',
+    "    for raw in path.read_text(encoding='utf-8', errors='replace').splitlines():",
+    "        m = rx.match(raw.strip())",
+    "        if not m:",
+    "            continue",
+    '        k, raw_v = m.group(1), m.group(2).strip()',
+    "        if raw_v.startswith('\"') and raw_v.endswith('\"'):",
+    '            raw_v = raw_v[1:-1]',
+    "        out[k] = raw_v",
+    "    return out",
+    "",
+    "",
+    "def main() -> None:",
+    '    ap = argparse.ArgumentParser(prog="osqueryi")',
+    '    ap.add_argument("--query", required=True)',
+    '    ap.add_argument("--source", required=True)',
+    "    ns = ap.parse_args()",
+    "    q = ns.query.strip().lower()",
+    "    path = Path(ns.source)",
+    "    if not path.exists():",
+    '        print("[osqueryi] missing source file")',
+    '        raise SystemExit(1)',
+    "    if 'os_version' not in q:",
+    '        print("[osqueryi] only os_version shim is modeled here")',
+    '        raise SystemExit(2)',
+    "    data = parse_os_release(path)",
+    "    for k in sorted(data):",
+    '        print(f"{k} = {data[k]}")',
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    main()",
+  ].join("\n"),
+
+  "persistence_audit.py": [
+    "#!/usr/bin/env python3",
+    '"""',
+    "persistence_audit: skim a user crontab for uncommented-looking job lines.",
+    '"""',
+    "",
+    "from __future__ import annotations",
+    "",
+    "import argparse",
+    "from pathlib import Path",
+    "",
+    "",
+    "def audit(path: Path) -> None:",
+    "    lines = path.read_text(encoding='utf-8', errors='replace').splitlines()",
+    '    print(f"[persistence] crontab: {path}")',
+    "    for i, ln in enumerate(lines, 1):",
+    "        s = ln.strip()",
+    "        if not s or s.startswith('#'):",
+    "            continue",
+    "        parts = s.split()",
+    "        if len(parts) >= 6:",
+    '            print(f"{i}: {s}")',
+    "",
+    "",
+    "def main() -> None:",
+    '    ap = argparse.ArgumentParser(prog="persistence_audit")',
+    '    ap.add_argument("--crontab", required=True)',
+    "    ns = ap.parse_args()",
+    "    audit(Path(ns.crontab))",
+    "",
+    "",
+    'if __name__ == "__main__":',
+    "    main()",
+  ].join("\n"),
+};
+
+function helperToolFiles(scenario: Scenario): VFiles {
+  const files: VFiles = {};
+  const commands = scenario.commands ? Object.keys(scenario.commands) : [];
+  for (const [name, source] of Object.entries(HELPER_TOOL_SOURCE)) {
+    if (!commands.some((command) => command.includes(name))) continue;
+
+    const abs = normalizePath(name, scenario.cwd);
+    if (scenario.files[abs]) continue;
+
+    files[abs] = {
+      perms: "r-xr-xr-x",
+      content: source,
+    };
+  }
+  return files;
+}
+
+/** Commands the museum shell implements. Used for tab completion. */
 const MUSEUM_COMMANDS: string[] = [
   "cat",
   "cd",
@@ -82,13 +522,19 @@ export class ScenarioShell {
   private completed = false;
   private events: RuntimeEvents;
   private hintsUsed = 0;
+  /** Normalized command line -> canned stdout for scenario.commands */
+  private simulatedLookup: Map<string, string>;
+  /** First words of simulated commands, for completion and display. */
+  private simVerbSet: Set<string>;
 
   constructor(scenario: Scenario, events: RuntimeEvents = {}) {
     this.scenario = scenario;
-    this.files = scenario.files;
+    this.files = { ...helperToolFiles(scenario), ...scenario.files };
     this.cwd = scenario.cwd;
     this.history = [...(scenario.history ?? [])];
     this.events = events;
+    this.simulatedLookup = buildSimulatedLookup(scenario.commands);
+    this.simVerbSet = new Set(simulatedCommandVerbs(scenario.commands));
   }
 
   /**
@@ -143,7 +589,7 @@ export class ScenarioShell {
     this.println(c.dim(`emulatehacks | ${s.exhibit} | museum shell`));
     this.println(
       c.dim(
-        `real bash-style invocations (cat, grep, head, find, …); evidence files are synthetic; no network or privileged ops`,
+        `bash-style builtins plus scenario-simulated tools; evidence is synthetic; no real network or privileged ops`,
       ),
     );
     this.println();
@@ -159,8 +605,11 @@ export class ScenarioShell {
   private printGoal(): void {
     const step = this.scenario.steps[this.stepIndex];
     if (!step) return;
+    const phasePrefix = step.phase
+      ? `${c.amber(`[${step.phase}]`)} `
+      : "";
     this.println(
-      `${c.cyan(`step ${this.stepIndex + 1}/${this.scenario.steps.length}`)} ${step.goal}`,
+      `${phasePrefix}${c.cyan(`step ${this.stepIndex + 1}/${this.scenario.steps.length}`)} ${step.goal}`,
     );
     this.println(
       c.dim("  tab completes commands and files (try *.html, ../ ) · `hint` · `help`"),
@@ -352,11 +801,15 @@ export class ScenarioShell {
     let candidates: string[];
     if (prevTokens.length === 0) {
       if (partial === "") {
-        candidates = [...MUSEUM_COMMANDS];
+        const simVerbs = simulatedCommandVerbs(this.scenario.commands);
+        candidates = sortedUnique([...MUSEUM_COMMANDS, ...simVerbs]);
       } else {
         const cmdCands = MUSEUM_COMMANDS.filter((cmd) => cmd.startsWith(partial));
+        const simVerbs = simulatedCommandVerbs(this.scenario.commands).filter((v) =>
+          v.startsWith(partial),
+        );
         const pathCands = this.pathCompletionCandidates(partial);
-        candidates = sortedUnique([...cmdCands, ...pathCands]);
+        candidates = sortedUnique([...cmdCands, ...simVerbs, ...pathCands]);
       }
     } else {
       candidates = this.pathCompletionCandidates(partial);
@@ -371,7 +824,7 @@ export class ScenarioShell {
       let repl = candidates[0];
       const isPath =
         prevTokens.length > 0 ||
-        !MUSEUM_COMMANDS.includes(repl) ||
+        (!MUSEUM_COMMANDS.includes(repl) && !this.simVerbSet.has(repl)) ||
         partial.includes("/") ||
         partial.startsWith(".");
       if (isPath) {
@@ -393,12 +846,19 @@ export class ScenarioShell {
     }
 
     const display =
-      prevTokens.length === 0 && candidates.every((x) => MUSEUM_COMMANDS.includes(x))
+      prevTokens.length === 0 &&
+      candidates.every(
+        (x) => MUSEUM_COMMANDS.includes(x) || this.simVerbSet.has(x),
+      )
         ? [...candidates].sort()
         : [...candidates]
             .sort()
             .map((p) => {
-              if (MUSEUM_COMMANDS.includes(p) && prevTokens.length === 0) return p;
+              if (
+                (MUSEUM_COMMANDS.includes(p) || this.simVerbSet.has(p)) &&
+                prevTokens.length === 0
+              )
+                return p;
               const abs = normalizePath(p, this.cwd);
               return isDirectory(this.files, abs) ? `${p}/` : p;
             });
@@ -428,6 +888,13 @@ export class ScenarioShell {
     const parts = tokenize(raw);
     const cmd = parts[0];
     const args = parts.slice(1);
+
+    const simOut = this.simulatedLookup.get(normalizeShellLine(raw));
+    if (simOut !== undefined) {
+      this.out(simOut.replace(/\n/g, NL));
+      return;
+    }
+
     switch (cmd) {
       case "help":
         return this.cmdHelp();
@@ -505,11 +972,17 @@ export class ScenarioShell {
   // --- Commands ---
 
   private cmdHelp(): void {
+    const sim = simulatedCommandVerbs(this.scenario.commands);
+    const simLine =
+      sim.length > 0
+        ? `${c.amber("simulated")} ${sim.sort().join(", ")}`
+        : `${c.amber("simulated")} (none for this exhibit)`;
     const lines = [
-      `${c.amber("available")}  ls, cat, head, tail, wc, cd, pwd, whoami, grep, find, history, ps, env, echo, hint, goal, clear`,
+      `${c.amber("builtins")}   ls, cat, head, tail, wc, cd, pwd, whoami, grep, find, history, ps, env, echo, hint, goal, clear`,
+      simLine,
       `${c.amber("grep")}       literal IOC strings by default; pass ${c.bold("-E")} for extended regex; ${c.bold("-n")} line numbers, ${c.bold("-i")} ignore case, ${c.bold("-v")} invert`,
-      `${c.amber("museum")}    tab completes commands + paths (incl. *.globs, . ..) · ${c.bold("hint")} / ${c.bold("goal")}`,
-      c.dim("destructive and network commands are disabled by design"),
+      `${c.amber("museum")}    tab completes builtins + simulated first words + paths · ${c.bold("hint")} / ${c.bold("goal")}`,
+      c.dim("destructive ops and undefined tools stay disabled by design"),
     ];
     for (const l of lines) this.println(l);
   }

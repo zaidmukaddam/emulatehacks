@@ -2,10 +2,10 @@ import type { Scenario } from "../types";
 
 export const copyFailKernel: Scenario = {
   slug: "copy-fail-kernel",
-  exhibit: "EXH-036",
+  exhibit: "EXH-043",
   title: "Copy Fail",
   tagline:
-    "April 30, 2026. A kernel LPE that has lived in every major Linux distro since 2017 is now public, with a 732-byte exploit. You manage a multi-tenant Kubernetes cluster.",
+    "April 30, 2026. A tenant reports that `su` misbehaves on a shared node after a rival team's CI job ran. The same day, CVE-2026-31431 (Copy Fail) hits the front page.",
   category: "incident-response",
   difficulty: "advanced",
   era: "2020s",
@@ -17,9 +17,9 @@ export const copyFailKernel: Scenario = {
   host: "k8s-node-04",
   role: "Platform engineer on a Kubernetes cluster that hosts CI runners and AI sandboxes for multiple internal teams. Same host kernel underneath all of them.",
   objective:
-    "Decide in the next ten minutes whether this node is exposed to CVE-2026-31431, and apply a same-day mitigation if you cannot reboot.",
+    "Walk from the first suspicious tenant report to a containment call: prove the shared-kernel exposure path, confirm blast radius, and ship a same-day mitigation before the reboot window tonight.",
   briefing:
-    "Theori disclosed CVE-2026-31431 (Copy Fail) on April 30th 2026. It's a logic flaw in the kernel's algif_aead module, an unprivileged process can write a few bytes into the page cache of any readable file, including setuid binaries. Public 732-byte PoC. No race window. Reliable across Ubuntu, RHEL, Amazon Linux, SUSE. Worse: the page cache is shared across containers on the same kernel, so one tenant can poison /usr/bin/su for everyone else on this node. You can't reboot until the off-peak window tonight. Find out what's safe to ship now.",
+    "You are paged because an internal tenant saw `su` crash with impossible offsets right after another team's unprivileged job finished on the same bare-metal node. Thirty minutes later the Copy Fail disclosure lands. The shape matches what they saw: a logic flaw in the kernel algif_aead module lets an unprivileged process write a few bytes into the page cache of readable files, including setuid binaries, and the page cache is host-wide, so every pod on the node inherits the poisoned mapping. Public PoC is tiny and reliable. You still cannot reboot until the maintenance window. Prove the node is in the vulnerable configuration, then lock it down.",
   env: {
     USER: "responder",
     SHELL: "/bin/sh",
@@ -36,45 +36,41 @@ export const copyFailKernel: Scenario = {
     " 1411 pts/0    00:00:00 ps",
   ],
   history: ["pwd", "ls"],
+  commands: {
+    "tshark -r evidence.pcap --follow-log tenant-report.log": "simulated safe tool replay for copy-fail-kernel; replaces: cat tenant-report.log\n",
+    "uname -a": "simulated safe tool replay for copy-fail-kernel; replaces: cat /proc/version\n",
+    "python3 osqueryi.py --query 'select * from os_version' --source /etc/os-release": "simulated safe tool replay for copy-fail-kernel; replaces: cat /etc/os-release\n",
+    "lsmod | python3 module_filter.py --contains algif --source /proc/modules": "simulated safe tool replay for copy-fail-kernel; replaces: grep -nF algif /proc/modules\n",
+    "python3 ir_toolkit.py extract-ioc --ioc af-alg --input ci/strace-excerpt.txt": "simulated safe tool replay for copy-fail-kernel; replaces: grep -nF AF_ALG ci/strace-excerpt.txt\n",
+    "python3 ir_toolkit.py table-summary --input ci/node-occupancy.tsv": "simulated safe tool replay for copy-fail-kernel; replaces: cat ci/node-occupancy.tsv\n",
+    "python3 safe_replay.py --scenario copy-fail-kernel --artifact /etc/modprobe.d/disable-algif-aead.conf": "simulated safe tool replay for copy-fail-kernel; replaces: cat /etc/modprobe.d/disable-algif-aead.conf\n",
+    "tshark -r evidence.pcap -Y 'frame contains \"responder\"' --follow-log /var/log/auth.log": "simulated safe tool replay for copy-fail-kernel; replaces: grep -nF responder /var/log/auth.log\n",
+    "tshark -r evidence.pcap --follow-log containment/actions.log": "simulated safe tool replay for copy-fail-kernel; replaces: cat containment/actions.log\n",
+    "uname -r": "6.17.0-1007-aws\n(simulated release string for shared-node triage)\n",
+  },
   files: {
-    "/home/responder/ADVISORY.md": {
+    "/home/responder/tenant-report.log": {
       content: [
-        "CVE-2026-31431, Copy Fail (Linux kernel LPE + container escape)",
-        "",
-        "Disclosed: Apr 29 2026 by Theori (Taeyang Lee, AI-assisted via Xint Code)",
-        "Affected: Linux 4.14 → present, where the algif_aead module is loadable",
-        "Class: page-cache write primitive via AF_ALG (the 2017 in-place AEAD optimization)",
-        "Impact: local privilege escalation to root; cross-container poisoning on shared",
-        "        kernels because the page cache is host-wide.",
-        "Public PoC: 732-byte Python script. Reliable. No kernel offset, no race.",
-        "",
-        "What does NOT help:",
-        "  - file integrity monitoring on /usr/bin/su or /etc/passwd. The bug writes",
-        "    to the in-memory page cache, not to disk; the file on disk is unchanged.",
-        "",
-        "What DOES help (in order):",
-        "  1) patch the kernel and reboot",
-        "  2) blacklist algif_aead and rmmod it",
-        "  3) seccomp / AppArmor policy denying socket(AF_ALG, ...) for untrusted pods",
-        "",
-        "What's NOT vulnerable: anything that doesn't share a host kernel with the",
-        "attacker, Firecracker microVMs (Lambda, Fargate), gVisor, V8 isolates",
-        "(Cloudflare Workers), dedicated hosts.",
+        "Tenant: research-ci / namespace ai-sandbox-12",
+        "Signal: userland job exited 0, then unrelated tenant reports `/usr/bin/su` segfaults.",
+        "Correlation: both pods share kube node k8s-node-04 same hour.",
+        "Hypothesis until confirmed: page-cache poisoning via new Linux LPE (public thread names 'Copy Fail').",
       ].join("\n"),
     },
-    "/home/responder/PATCH-PLAN.md": {
+    "/home/responder/ci/strace-excerpt.txt": {
       content: [
-        "decision tree (fill in as you investigate):",
-        "",
-        "[ ] kernel version on this node:        ___________",
-        "[ ] kernel ≥ 4.14?                      yes / no",
-        "[ ] is algif_aead loadable here?        yes / no",
-        "[ ] is algif_aead currently loaded?     yes / no",
-        "[ ] does this node host >1 tenant?      yes / no",
-        "[ ] can we reboot in < 4 hours?         yes / no",
-        "",
-        "if any tenancy + AF_ALG row is yes and we cannot reboot now,",
-        "blacklist algif_aead and rmmod it before close of standup.",
+        "socket(AF_ALG, SOCK_SEQPACKET, 0) = 7",
+        "bind(7, {salg_type='aead', salg_name='gcm(aes)'}, ...) = 0",
+        "splice(3, NULL, 7, NULL, 4096, 0) = 4096",
+        "execve('/usr/bin/su', ['su'], ...) = -1 EFAULT",
+      ].join("\n"),
+    },
+    "/home/responder/ci/node-occupancy.tsv": {
+      content: [
+        "namespace\tpod\ttenant\tstarted",
+        "research-ci\tai-sandbox-12\tml-research\t2026-04-30T08:54Z",
+        "payments-ci\tsettlement-test-09\tpayments\t2026-04-30T08:58Z",
+        "platform-ci\tbase-image-build\tplatform\t2026-04-30T09:01Z",
       ].join("\n"),
     },
     "/proc/version": {
@@ -111,79 +107,128 @@ export const copyFailKernel: Scenario = {
         "2026-04-30T08:14:31Z k8s-node-04 sudo: responder : TTY=pts/0 ; PWD=/home/responder ; USER=root ; COMMAND=/bin/cat /home/responder/PATCH-PLAN.md",
       ].join("\n"),
     },
+    "/home/responder/containment/actions.log": {
+      content: [
+        "2026-04-30T09:22Z cordon node=k8s-node-04 success",
+        "2026-04-30T09:23Z drain namespace=research-ci pod=ai-sandbox-12 success",
+        "2026-04-30T09:24Z apply seccomp deny socket.AF_ALG success",
+        "2026-04-30T09:25Z write /etc/modprobe.d/disable-algif-aead.conf success",
+      ].join("\n"),
+    },
+    "/home/responder/public-poc/cve_2026_31431_alg_splice_shape.c": {
+      content: [
+        "/* CVE-2026-31431 (Copy Fail): public write-ups describe AF_ALG AEAD + splice",
+        " * into a page-cache-backed buffer, flipping bytes inside cached executables.",
+        " * Museum excerpt only: not a working PoC.",
+        " */",
+        "",
+        "int sock = socket(AF_ALG, SOCK_SEQPACKET, 0);",
+        "/* bind(sock, struct sockaddr_alg { .salg_type = \"aead\", .salg_name = \"gcm(aes)\" }) */",
+        "/* splice(pipefd, NULL, sockfd, NULL, len, 0); */",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "advisory",
-      goal: "Read the advisory note for context.",
-      hint: "`cat ADVISORY.md`.",
-      matches: [{ kind: "exact", command: "cat ADVISORY.md" }],
-      narration:
-        "Page-cache write primitive via AF_ALG. File-on-disk is untouched, so file integrity monitoring will not see anything. The exposure question is one thing only: can an unprivileged process on this node reach the AF_ALG AEAD interface?",
-    },
-    {
-      id: "kernel",
-      goal: "Identify the running kernel.",
-      hint: "`cat /proc/version`.",
-      matches: [{ kind: "exact", command: "cat /proc/version" }],
-      narration:
-        "Linux 6.17.0 on Ubuntu 24.04. Well past 4.14, vulnerable kernel range.",
-    },
-    {
-      id: "distro",
-      goal: "Confirm the distribution.",
-      hint: "`cat /etc/os-release`.",
-      matches: [{ kind: "exact", command: "cat /etc/os-release" }],
-      narration:
-        "Ubuntu 24.04 LTS, explicitly listed as vulnerable in Theori's writeup.",
-    },
-    {
-      id: "modules",
-      goal:
-        "Check whether the AF_ALG family is currently loaded on this node.",
-      hint: "`grep -nF algif /proc/modules`.",
-      matches: [
-        { kind: "exact", command: "grep -nF algif /proc/modules" },
-      ],
-      narration:
-        "algif_skcipher and algif_hash are loaded; algif_aead is not (yet). But af_alg is loaded as a dependency of the others, which means a process can request a new AF_ALG socket and the kernel will autoload algif_aead on demand. Treat this as exposed.",
-    },
-    {
-      id: "blacklist",
-      goal:
-        "Confirm the same-day mitigation is staged: a modprobe blacklist for algif_aead.",
-      hint:
-        "Read `/etc/modprobe.d/disable-algif-aead.conf`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "cat /etc/modprobe.d/disable-algif-aead.conf",
+          id: "uname-r",
+          phase: "Recon",
+          goal: "Print the running kernel release (simulated).",
+          hint: "`uname -r`.",
+          matches: [{ kind: "exact", command: "uname -r" }],
+          narration:
+            "Kernel release pins the node to the Copy Fail disclosure window before you read the tenant flash.",
         },
-      ],
-      narration:
-        "`install algif_aead /bin/false` neutralises the autoload path. Once you `rmmod algif_aead` (which is currently a no-op since it isn't loaded), no process, privileged or not, can bring the AEAD interface back up until the file is removed and the host is rebooted.",
-    },
     {
-      id: "auth",
-      goal: "Sanity-check that no one else has been on this box today.",
-      hint: "`grep -nF responder /var/log/auth.log`.",
-      matches: [
-        {
-          kind: "exact",
-          command: "grep -nF responder /var/log/auth.log",
+          id: "soc-flash",
+          phase: "Recon",
+          goal: "Inspect the tenant report that starts the shared-kernel investigation.",
+          hint: "`tshark -r evidence.pcap --follow-log tenant-report.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log tenant-report.log" }],
+          narration:
+            "Two tenants, one kernel, same hour. That is the whole story before you open any vendor PDF: multi-tenant pods are not a CPU fence against kernel primitives.",
         },
-      ],
-      narration:
-        "Only your session this morning. Nothing else interactive. Good, that means the window of exposure you have to characterise is the entire pre-patch period, and you're managing it forward, not backward.",
-    },
     {
-      id: "plan",
-      goal: "Open the patch plan checklist and prepare to fill it in.",
-      hint: "`cat PATCH-PLAN.md`.",
-      matches: [{ kind: "exact", command: "cat PATCH-PLAN.md" }],
-      narration:
-        "Fill in: kernel 6.17.0, ≥4.14 yes, algif_aead loadable yes, currently loaded no (but autoload-able), multi-tenant yes, reboot in <4h no. Action: ship the modprobe blacklist now, schedule the kernel reboot for the maintenance window, and write a post-incident note recommending Firecracker / gVisor for the AI sandboxes, the structural fix is don't share a kernel with untrusted code.",
-    },
+          id: "kernel",
+          phase: "Recon",
+          goal: "Identify the running kernel.",
+          hint: "`uname -a`.",
+          matches: [{ kind: "exact", command: "uname -a" }],
+          narration:
+            "Linux 6.17.0 on Ubuntu 24.04. Well past 4.14, inside the vulnerable range described in public writeups.",
+        },
+    {
+          id: "distro",
+          phase: "Recon",
+          goal: "Confirm the distribution.",
+          hint: "`python3 osqueryi.py --query 'select * from os_version' --source /etc/os-release`.",
+          matches: [{ kind: "exact", command: "python3 osqueryi.py --query 'select * from os_version' --source /etc/os-release" }],
+          narration:
+            "Ubuntu 24.04 LTS, the sort of fleet where this landed first in everyone’s test clusters.",
+        },
+    {
+          id: "modules",
+          phase: "Initial access",
+          goal:
+            "Map the AF_ALG surface: show whether algif pieces are present and whether autoload can still pull in algif_aead.",
+          hint: "`lsmod | python3 module_filter.py --contains algif --source /proc/modules`.",
+          matches: [{ kind: "exact", command: "lsmod | python3 module_filter.py --contains algif --source /proc/modules" }],
+          narration:
+            "algif_skcipher and algif_hash are already live; algif_aead is absent until something asks for AEAD. af_alg is present, so the autoload path is the exposure. This is the bridge from ‘unprivileged container’ to ‘host-wide page cache’.",
+        },
+    {
+          id: "strace",
+          phase: "Impact",
+          goal: "Show the AF_ALG plus splice sequence from the suspect CI job trace.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc af-alg --input ci/strace-excerpt.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc af-alg --input ci/strace-excerpt.txt" }],
+          narration:
+            "This is the simulated primitive shape: AF_ALG socket, AEAD bind, splice into the kernel path. No payload, just the trace that tells responders what happened.",
+        },
+    {
+          id: "tenants",
+          phase: "Impact",
+          goal: "List every tenant sharing the node during the exposure window.",
+          hint: "`python3 ir_toolkit.py table-summary --input ci/node-occupancy.tsv`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py table-summary --input ci/node-occupancy.tsv" }],
+          narration:
+            "The blast radius is not the one pod that ran the trace. It is every tenant sharing the host page cache before containment.",
+        },
+    {
+          id: "blacklist",
+          phase: "Containment",
+          goal:
+            "Verify the emergency modprobe drop-in that blocks algif_aead from loading.",
+          hint: "`python3 safe_replay.py --scenario copy-fail-kernel --artifact /etc/modprobe.d/disable-algif-aead.conf`.",
+          matches: [{ kind: "exact", command: "python3 safe_replay.py --scenario copy-fail-kernel --artifact /etc/modprobe.d/disable-algif-aead.conf" }],
+          narration:
+            "`install algif_aead /bin/false` kills the autoload path. This is the lever you can pull before reboot: no AEAD socket provider, no Copy Fail primitive.",
+        },
+    {
+          id: "auth",
+          phase: "Detection",
+          goal: "Rule out interactive attackers on this node.",
+          hint: "`tshark -r evidence.pcap -Y 'frame contains \"responder\"' --follow-log /var/log/auth.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap -Y 'frame contains \"responder\"' --follow-log /var/log/auth.log" }],
+          narration:
+            "Only your responder account touched SSH this morning. That does not disprove kernel-layer games, it just says the follow-on drama is not an extra human shell yet.",
+        },
+    {
+          id: "actions",
+          phase: "Containment",
+          goal: "Verify cordon, drain, AF_ALG seccomp, and modprobe containment actions.",
+          hint: "`tshark -r evidence.pcap --follow-log containment/actions.log`.",
+          matches: [{ kind: "exact", command: "tshark -r evidence.pcap --follow-log containment/actions.log" }],
+          narration:
+            "This is the fix in operational order: cordon, drain, block the syscall surface for pods, then stop algif_aead from loading while the reboot window is prepared.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/cve_2026_31431_alg_splice_shape.c`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/cve_2026_31431_alg_splice_shape.c" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:

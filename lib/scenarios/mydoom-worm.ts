@@ -18,12 +18,19 @@ export const mydoomWorm: Scenario = {
   host: "mx-ord-west",
   role: "NOC analyst during the week Mydoom's SMTP traffic dwarfed legitimate mail at several universities.",
   objective:
-    "From queue dumps and a stub CERT-style note, characterise the mail + backdoor footprint without touching live binaries.",
+    "Probe the Mydoom backdoor port from the NOC jump box, then read the CERT note and the deferred mail sample.",
   briefing:
     "This reconstruction reads like 2004 help-desk radio. The worm mailed copies of itself and opened a listener designers used as a staged DDoS platform against SCO Group's site, history you can quote in the debrief, not execute here.",
   env: { USER: "noc", SHELL: "/bin/sh", PWD: "/var/spool/sohokiller-watch" },
   ps: ["  PID TTY TIME CMD", "  12 ?   0:34 sendmail", "  900 pts/0 0:00 sh"],
   history: ["who"],
+  commands: {
+    "python3 ir_toolkit.py parse-artifact --input CERT-style-NOTE.txt": "simulated safe tool replay for mydoom-smtp; replaces: cat CERT-style-NOTE.txt\n",
+    "python3 ir_toolkit.py parse-artifact --input deferred-sample.txt": "simulated safe tool replay for mydoom-smtp; replaces: cat deferred-sample.txt\n",
+    "python3 ir_toolkit.py extract-ioc --ioc ioc --input deferred-sample.txt": "simulated safe tool replay for mydoom-smtp; replaces: grep -nF message.zip deferred-sample.txt\n",
+    "nc -vz 203.0.113.77 3127":
+      "Connection to 203.0.113.77 3127 port [tcp/*] succeeded! (simulated infected desktop listener)\n",
+  },
   files: {
     "/var/spool/sohokiller-watch/CERT-style-NOTE.txt": {
       content: [
@@ -45,32 +52,57 @@ export const mydoomWorm: Scenario = {
         "X-Amavis-Alert: YES_MYDOOM_HEX_SIG",
       ].join("\n"),
     },
+    "/var/spool/sohokiller-watch/public-poc/mydoom_backdoor_listen_stub.c": {
+      content: [
+        "/* Museum note: infected hosts listened TCP 3127 (Mydoom.A era public IOC). */",
+        "/* Real worm carried SMTP engine + SOCKS-like proxy staging; no live code here. */",
+        "",
+        "#include <netinet/in.h>",
+        "// socket(AF_INET, SOCK_STREAM, 0); bind(port 3127); listen(); /* analyst checklist */",
+      ].join("\n"),
+    },
   },
   steps: [
     {
-      id: "read-note",
-      goal: "Read the CERT-style reconstruction note.",
-      hint: "`cat CERT-style-NOTE.txt`.",
-      matches: [{ kind: "exact", command: "cat CERT-style-NOTE.txt" }],
-      narration:
-        "SMTP + file-sharing + backdoor, the triple package before botnets professionalised rental.",
-    },
+          id: "nc-backdoor",
+          goal: "Simulate an nc connectivity probe to the classic Mydoom listener port.",
+          hint: "`nc -vz 203.0.113.77 3127`.",
+          matches: [{ kind: "exact", command: "nc -vz 203.0.113.77 3127" }],
+          narration:
+            "TCP 3127 was the tell on help-desk checklists: worm phones home for staged DDoS tooling, not just SMTP noise.",
+        },
     {
-      id: "sample",
-      goal: "Inspect the deferred spam sample.",
-      hint: "`cat deferred-sample.txt`.",
-      matches: [{ kind: "exact", command: "cat deferred-sample.txt" }],
-      narration:
-        "Spoofed `Mail Delivery System`, attackers learned early that system messages bypass scepticism.",
-    },
+          id: "read-note",
+          goal: "Read the CERT-style reconstruction note.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input CERT-style-NOTE.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input CERT-style-NOTE.txt" }],
+          narration:
+            "SMTP + file-sharing + backdoor, the triple package before botnets professionalised rental.",
+        },
     {
-      id: "grep-zip",
-      goal: "Pull the line naming the weaponised archive.",
-      hint: "`grep -nF message.zip deferred-sample.txt`.",
-      matches: [{ kind: "exact", command: "grep -nF message.zip deferred-sample.txt" }],
-      narration:
-        "Same attachment naming every branch office, easy fingerprint once AV hexdumps stabilise.",
-    },
+          id: "sample",
+          goal: "Inspect the deferred spam sample.",
+          hint: "`python3 ir_toolkit.py parse-artifact --input deferred-sample.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py parse-artifact --input deferred-sample.txt" }],
+          narration:
+            "Spoofed `Mail Delivery System`, attackers learned early that system messages bypass scepticism.",
+        },
+    {
+          id: "grep-zip",
+          goal: "Pull the line naming the weaponised archive.",
+          hint: "`python3 ir_toolkit.py extract-ioc --ioc ioc --input deferred-sample.txt`.",
+          matches: [{ kind: "exact", command: "python3 ir_toolkit.py extract-ioc --ioc ioc --input deferred-sample.txt" }],
+          narration:
+            "Same attachment naming every branch office, easy fingerprint once AV hexdumps stabilise.",
+        },
+    {
+          id: "mechanism-excerpt",
+          goal: "Review the archived public mechanism excerpt for this exhibit (museum reference).",
+          hint: `head -n 80 public-poc/mydoom_backdoor_listen_stub.c`,
+          matches: [{ kind: "exact", command: "head -n 80 public-poc/mydoom_backdoor_listen_stub.c" }],
+          narration:
+            "Educational material from disclosure-era patterns; excerpt only and nothing executes in this shell.",
+        }
   ],
   debrief: {
     summary:
