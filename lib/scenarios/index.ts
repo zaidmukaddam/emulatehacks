@@ -7,6 +7,7 @@ import { classicPasswd } from "./classic-passwd";
 import { codeRedWorm } from "./code-red-worm";
 import { colonialPipeline } from "./colonial-pipeline";
 import { confickerWorm } from "./conficker-worm";
+import { cpanelFilemanager } from "./cpanel-filemanager";
 import { copyFailKernel } from "./copy-fail-kernel";
 import { equifaxStruts } from "./equifax-struts";
 import { exposedEnv } from "./exposed-env";
@@ -37,7 +38,7 @@ import { wannacryRansomware } from "./wannacry-ransomware";
 import { xzBackdoor } from "./xz-backdoor";
 
 /**
- * Catalog order: oldest incident to newest (EXH-001 through EXH-036). The archive page
+ * Catalog order: oldest incident to newest (EXH-001 through EXH-037). The archive page
  * renders newest-first via `scenariosNewestFirst`.
  */
 export const scenarios: Scenario[] = [
@@ -77,6 +78,7 @@ export const scenarios: Scenario[] = [
   npmQixPhish, // EXH-034 / 2025
   react2shell, // EXH-035 / 2025
   copyFailKernel, // EXH-036 / 2026
+  cpanelFilemanager, // EXH-037 / 2026
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
