@@ -170,7 +170,17 @@
     * {
         @apply border-border;
         outline-color: color-mix(in oklch, var(--ring) 50%, transparent);
+        /* Hide scrollbars site-wide; wheel / trackpad / touch scrolling still works. */
+        scrollbar-width: none;
+        -ms-overflow-style: none;
     }
+
+    *::-webkit-scrollbar {
+        display: none;
+        width: 0;
+        height: 0;
+    }
+
     html {
         font-family: var(--font-mono);
         text-rendering: optimizeLegibility;
@@ -319,6 +329,18 @@
 /* wterm scoped tweaks */
 .eh-terminal {
     --wterm-bg: oklch(0.115 0.004 70);
+}
+
+/* wterm enables overflow-y:auto when `.has-scrollback` is set (scrollback taller than viewport). */
+.wterm.has-scrollback {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+.wterm.has-scrollback::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
 }
 
 /* === View Transitions === */
