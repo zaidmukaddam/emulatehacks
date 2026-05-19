@@ -60,6 +60,7 @@ const SCENARIO_GLYPH: Record<string, LucideIcon> = {
   "equifax-struts-cve": Building2,
   "exposed-env-file": FileWarning,
   "f5-bigip-tmui": Layers2,
+  "grafana-github-token": KeyRound,
   "greenplasma-privesc": Zap,
   "heartbleed-openssl": HeartCrack,
   "http2-rapid-reset": Zap,

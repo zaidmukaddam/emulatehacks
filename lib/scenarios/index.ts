@@ -13,6 +13,7 @@ import { confickerWorm } from "./conficker-worm";
 import { copyFailDirtyFrag } from "./copy-fail-dirty-frag";
 import { copyFailKernel } from "./copy-fail-kernel";
 import { cve202632202SpoofLure } from "./cve-2026-32202-spoof-lure";
+import { grafanaGithubToken } from "./grafana-github-token";
 import { greenplasmaPrivesc } from "./greenplasma-privesc";
 import { miniShaiHulud } from "./mini-shai-hulud";
 import { nextAdvisoryWave2026 } from "./next-advisory-wave-2026";
@@ -48,7 +49,7 @@ import { wannacryRansomware } from "./wannacry-ransomware";
 import { xzBackdoor } from "./xz-backdoor";
 
 /**
- * Catalog order: oldest incident to newest (EXH-001 through EXH-047). The archive page
+ * Catalog order: oldest incident to newest (EXH-001 through EXH-048). The archive page
  * renders newest-first via `scenariosNewestFirst`.
  */
 export const scenarios: Scenario[] = [
@@ -98,7 +99,8 @@ export const scenarios: Scenario[] = [
   panosUseridPortal0300, // EXH-044 / 2026 May
   copyFailDirtyFrag, // EXH-045 / 2026 May
   miniShaiHulud, // EXH-046 / 2026 May
-  aiAssistedAdminZeroDay, // EXH-047 / 2026 Jun
+  aiAssistedAdminZeroDay, // EXH-047 / 2026 May
+  grafanaGithubToken, // EXH-048 / 2026 May
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
