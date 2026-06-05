@@ -17,6 +17,7 @@ import { greenplasmaPrivesc } from "./greenplasma-privesc";
 import { miniShaiHulud } from "./mini-shai-hulud";
 import { nextAdvisoryWave2026 } from "./next-advisory-wave-2026";
 import { panosUseridPortal0300 } from "./panos-cve-2026-0300";
+import { phantomGypMiasma } from "./phantom-gyp-miasma";
 import { windowsKevShellMshtml } from "./windows-kev-shell-mshtml";
 import { yellowkeyBitlocker } from "./yellowkey-bitlocker";
 import { equifaxStruts } from "./equifax-struts";
@@ -99,6 +100,7 @@ export const scenarios: Scenario[] = [
   copyFailDirtyFrag, // EXH-045 / 2026 May
   miniShaiHulud, // EXH-046 / 2026 May
   aiAssistedAdminZeroDay, // EXH-047 / 2026 Jun
+  phantomGypMiasma, // EXH-048 / 2026 Jun
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
