@@ -7,6 +7,7 @@ import { citrixBleed } from "./citrix-bleed";
 import { ciTokenLeak } from "./ci-token-leak";
 import { classicPasswd } from "./classic-passwd";
 import { canvasLmsCompromise } from "./canvas-lms-compromise";
+import { ciscoSdwanPrivesc } from "./cisco-sdwan-privesc";
 import { codeRedWorm } from "./code-red-worm";
 import { colonialPipeline } from "./colonial-pipeline";
 import { confickerWorm } from "./conficker-worm";
@@ -48,7 +49,7 @@ import { wannacryRansomware } from "./wannacry-ransomware";
 import { xzBackdoor } from "./xz-backdoor";
 
 /**
- * Catalog order: oldest incident to newest (EXH-001 through EXH-047). The archive page
+ * Catalog order: oldest incident to newest (EXH-001 through EXH-048). The archive page
  * renders newest-first via `scenariosNewestFirst`.
  */
 export const scenarios: Scenario[] = [
@@ -99,6 +100,7 @@ export const scenarios: Scenario[] = [
   copyFailDirtyFrag, // EXH-045 / 2026 May
   miniShaiHulud, // EXH-046 / 2026 May
   aiAssistedAdminZeroDay, // EXH-047 / 2026 Jun
+  ciscoSdwanPrivesc, // EXH-048 / 2026 Jun
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
