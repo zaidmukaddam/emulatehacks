@@ -10,7 +10,7 @@ export const hadesPypiShaiHulud: Scenario = {
   exhibit: "EXH-048",
   title: "Hades Startup Hook",
   tagline:
-    "June 8, 2026. A new Shai-Hulud wave lands in PyPI wheels, runs through startup hooks before import, and hunts CI secrets across package ecosystems.",
+    "8 June 2026. A new Shai-Hulud wave lands in PyPI wheels, runs through startup hooks before import, and hunts CI secrets across package ecosystems.",
   category: "modern-cloud",
   difficulty: "advanced",
   era: "2020s",
