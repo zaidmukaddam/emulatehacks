@@ -26,6 +26,7 @@ import { heartbleedTls } from "./heartbleed-tls";
 import { http2RapidReset } from "./http2-rapid-reset";
 import { iloveyouVirus } from "./iloveyou-virus";
 import { log4shellJndi } from "./log4shell-jndi";
+import { mackaySugarMillOutage } from "./mackay-sugar-mill-outage";
 import { melissaMacro } from "./melissa-macro";
 import { miraiBotnet } from "./mirai-botnet";
 import { morrisWorm } from "./morris-worm";
@@ -99,6 +100,7 @@ export const scenarios: Scenario[] = [
   copyFailDirtyFrag, // EXH-045 / 2026 May
   miniShaiHulud, // EXH-046 / 2026 May
   aiAssistedAdminZeroDay, // EXH-047 / 2026 Jun
+  mackaySugarMillOutage, // EXH-048 / 2026 Jun
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
