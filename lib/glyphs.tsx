@@ -74,6 +74,7 @@ const SCENARIO_GLYPH: Record<string, LucideIcon> = {
   "next-advisory-wave-2026": Component,
   "npm-qix-phish": PackageX,
   "panos-cve-2026-0300": ShieldAlert,
+  "peoplesoft-zero-day-extortion": Database,
   "polyfill-cdn-sale": Globe,
   "proxylogon-exchange": MailSearch,
   "react2shell-rsc": Component,
