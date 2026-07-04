@@ -37,6 +37,7 @@ import { proxylogonExchange } from "./proxylogon-exchange";
 import { react2shell } from "./react2shell";
 import { regresshion } from "./regresshion";
 import { shellshockBash } from "./shellshock-bash";
+import { slaIbmTestCloud } from "./sla-ibm-test-cloud";
 import { solarwindsSunburst } from "./solarwinds-sunburst";
 import { spring4shell } from "./spring4shell";
 import { sqlSlammer } from "./sql-slammer";
@@ -99,6 +100,7 @@ export const scenarios: Scenario[] = [
   copyFailDirtyFrag, // EXH-045 / 2026 May
   miniShaiHulud, // EXH-046 / 2026 May
   aiAssistedAdminZeroDay, // EXH-047 / 2026 Jun
+  slaIbmTestCloud, // EXH-048 / 2026 Jul
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
