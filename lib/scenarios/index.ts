@@ -14,6 +14,7 @@ import { copyFailDirtyFrag } from "./copy-fail-dirty-frag";
 import { copyFailKernel } from "./copy-fail-kernel";
 import { cve202632202SpoofLure } from "./cve-2026-32202-spoof-lure";
 import { greenplasmaPrivesc } from "./greenplasma-privesc";
+import { jadepufferAgenticRansomware } from "./jadepuffer-agentic-ransomware";
 import { miniShaiHulud } from "./mini-shai-hulud";
 import { nextAdvisoryWave2026 } from "./next-advisory-wave-2026";
 import { panosUseridPortal0300 } from "./panos-cve-2026-0300";
@@ -99,6 +100,7 @@ export const scenarios: Scenario[] = [
   copyFailDirtyFrag, // EXH-045 / 2026 May
   miniShaiHulud, // EXH-046 / 2026 May
   aiAssistedAdminZeroDay, // EXH-047 / 2026 Jun
+  jadepufferAgenticRansomware, // EXH-048 / 2026 Jul
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
