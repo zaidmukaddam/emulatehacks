@@ -30,6 +30,7 @@ import { melissaMacro } from "./melissa-macro";
 import { miraiBotnet } from "./mirai-botnet";
 import { morrisWorm } from "./morris-worm";
 import { moveitTransferClop } from "./moveit-transfer";
+import { mruHDriveRansomware } from "./mru-h-drive-ransomware";
 import { mydoomWorm } from "./mydoom-worm";
 import { npmQixPhish } from "./npm-qix-phish";
 import { polyfillCdn } from "./polyfill-cdn";
@@ -99,6 +100,7 @@ export const scenarios: Scenario[] = [
   copyFailDirtyFrag, // EXH-045 / 2026 May
   miniShaiHulud, // EXH-046 / 2026 May
   aiAssistedAdminZeroDay, // EXH-047 / 2026 Jun
+  mruHDriveRansomware, // EXH-048 / 2026 Jul
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
