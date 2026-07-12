@@ -2,6 +2,7 @@ import type { Scenario } from "../types";
 import { threeCxSupplyChain } from "./3cx-supply-chain";
 import { aiAssistedAdminZeroDay } from "./ai-assisted-zero-day-admin";
 import { applePlatformCveSurge } from "./apple-platform-cve-surge";
+import { bonzoLendOracleExploit } from "./bonzo-lend-oracle-exploit";
 import { cihVirus } from "./cih-virus";
 import { citrixBleed } from "./citrix-bleed";
 import { ciTokenLeak } from "./ci-token-leak";
@@ -99,6 +100,7 @@ export const scenarios: Scenario[] = [
   copyFailDirtyFrag, // EXH-045 / 2026 May
   miniShaiHulud, // EXH-046 / 2026 May
   aiAssistedAdminZeroDay, // EXH-047 / 2026 Jun
+  bonzoLendOracleExploit, // EXH-048 / 2026 Jul
 ];
 
 export const scenarioMap = new Map(scenarios.map((s) => [s.slug, s]));
