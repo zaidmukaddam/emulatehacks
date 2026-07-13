@@ -33,7 +33,7 @@ export const giteaDockerAuthBypass: Scenario = {
   ],
   history: ["pwd", "ls"],
   commands: {
-    "curl -sI https://git.internal.example/explore": [
+    "curl -sI https://git.internal.example/": [
       "HTTP/2 302",
       "location: /user/login",
       "server: gitea-museum",
@@ -134,8 +134,8 @@ export const giteaDockerAuthBypass: Scenario = {
       id: "baseline",
       phase: "Recon",
       goal: "Confirm the forge normally redirects unauthenticated users to login.",
-      hint: "`curl -sI https://git.internal.example/explore`.",
-      matches: [{ kind: "exact", command: "curl -sI https://git.internal.example/explore" }],
+      hint: "`curl -sI https://git.internal.example/`.",
+      matches: [{ kind: "exact", command: "curl -sI https://git.internal.example/" }],
       narration:
         "A normal browser path still lands on login. The bug hides below that surface, in whether the backend trusts identity headers from the wrong network path.",
     },
