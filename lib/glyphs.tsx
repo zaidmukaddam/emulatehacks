@@ -64,6 +64,7 @@ const SCENARIO_GLYPH: Record<string, LucideIcon> = {
   "heartbleed-openssl": HeartCrack,
   "http2-rapid-reset": Zap,
   "iloveyou-macro": Mail,
+  "jscrambler-npm-stealer": PackageX,
   "log4shell-jndi": Binary,
   "melissa-macro": ScrollText,
   "mini-shai-hulud": Worm,
